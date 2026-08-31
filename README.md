@@ -1,27 +1,27 @@
 # formalspec-cookbook
 
-A cookbook that models the same topics in several formal specification languages, to compare
-their expressiveness, ergonomics and verification capabilities.
+同じお題を複数の形式仕様記述言語でモデル化し、表現力・書き味・検証能力の違いを比較するためのリポジトリ。
 
-Each topic directory holds a natural-language specification (`spec.md`) plus one directory per language.
+各お題のディレクトリには、自然言語での仕様 (`spec.md`) と、記述言語ごとのディレクトリを置く。
 
-## Matrix
+## 対応表（マトリクス）
 
-| Topic | Spec | Alloy | TLA+ | Quint |
+| お題 | 仕様 | Alloy | TLA+ | Quint |
 | --- | --- | --- | --- | --- |
-| Approval request workflow (稟議申請) | [spec.md](approval_request/spec.md) | - | - | - |
+| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | - | - | - |
 
-Legend: `done` implemented / `wip` in progress / `-` not started.
+凡例: ✓ 実装済 / WIP 作業中 / - 未着手
 
-## Layout
+## ディレクトリ構成
 
 ```
 .
-├── README.md                 # project overview and the matrix
-├── approval_request/         # topic 1: approval request workflow
-│   └── spec.md               # requirements in natural language
-└── scripts/                  # automation scripts (catalog generation, etc.)
+├── README.md                 # プロジェクトの概要と対応表（マトリクス）
+├── approval_request/         # お題1: 稟議申請システム
+│   └── spec.md               # お題の仕様・要件定義（自然言語）
+└── scripts/                  # カタログ生成などの自動化スクリプト
 ```
 
-To add a topic, create `<topic>/spec.md` and add a row to the matrix above.
-Language models go under `<topic>/<language>/`, e.g. `approval_request/alloy/approval.als`.
+お題を追加するときは `<topic>/spec.md` を作成し、上記マトリクスに行を追加する。
+記述言語ごとのモデルは `<topic>/<language>/` 配下に置く（例: `approval_request/alloy/approval.als`）。
+ディレクトリ名・ファイル名は英語、文書の本文は日本語で記述する。

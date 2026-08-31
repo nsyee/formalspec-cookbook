@@ -1,39 +1,39 @@
-# Topic: Approval Request Workflow (稟議申請システム)
+# お題: 稟議申請システム (Approval Request Workflow)
 
-An approval ("ringi") workflow where users may belong to multiple departments at the same time.
-The core modelling challenge is that a role (member vs. manager) is **not** an attribute of a user,
-but of a *(user, department)* pair.
+兼務（複数部署への同時所属）を前提とした稟議申請のワークフローと、その権限モデルを扱うお題。
+役職（一般メンバーか上長か）がユーザー単体の属性ではなく **「ユーザーと部署の組み合わせ」** に対して
+定義される点が、モデル化の中心的な難所となる。
 
-## 1. Entities and attributes
+## 1. 構成要素（エンティティと属性）
 
-### Department
-- The system contains multiple departments.
+### 部署 (Department)
+- システム内には複数の部署が存在する。
 
-### User
-- The system contains multiple users.
+### ユーザー (User)
+- システム内には複数のユーザーが存在する。
 
-### Affiliation (membership and role)
-- A user belongs to one or more departments (concurrent affiliations are allowed).
-- A role (`Member` or `Manager`) is defined for a **(user, department) pair**, not for a user alone.
-  - Example: user A is a `Manager` of department X and, at the same time, a `Member` of department Y.
-- Every department has at least one `Manager`.
+### 所属と役職 (Affiliation)
+- ユーザーは 1 つ以上の部署に所属する（兼務可能）。
+- 役職（`Member` / `Manager`）はユーザー単体の属性ではなく、**(ユーザー, 部署) の組** に対して定義される。
+  - 例: ユーザー A は部署 X の `Manager` であり、同時に部署 Y の `Member` である。
+- 各部署には必ず 1 名以上の `Manager` が存在する。
 
-### Request
-| Attribute | Description |
+### 稟議申請 (Request)
+| 属性 | 説明 |
 | --- | --- |
-| author | The user who created the request. |
-| target department | The single department the request is submitted to. The author must belong to it. Even when the author has multiple affiliations, exactly one target department is fixed per request. |
-| status | Current status of the request. |
+| 作成者 (author) | 申請を作成したユーザー。 |
+| 申請先部署 (target department) | 申請が提出される特定の 1 つの部署。作成者はその部署に所属していなければならない。作成者が兼務している場合でも、申請先は 1 つに定まる。 |
+| 状態 (status) | 稟議の現在のステータス。 |
 
-## 2. Status model
+## 2. 状態モデル
 
-| Status | Description | Terminal |
+| 状態 | 説明 | 終端 |
 | --- | --- | --- |
-| `Draft` | Being created by the author; not submitted yet. | |
-| `Pending` | Submitted; waiting for approval by a manager of the target department. | |
-| `Returned` | A manager judged that changes are needed and sent it back to the author. | |
-| `Approved` | Approved by a manager of the target department. | yes |
-| `Rejected` | Rejected by a manager of the target department. | yes |
+| `Draft` | 作成者が新規作成中で、まだ提出されていない。 | |
+| `Pending` | 提出済みで、申請先部署の上長の承認待ち。 | |
+| `Returned` | 上長が修正必要と判断し、作成者に差し戻した。 | |
+| `Approved` | 申請先部署の上長によって承認された。 | ✓ |
+| `Rejected` | 申請先部署の上長によって却下された。 | ✓ |
 
 ```
             submit                 approve
@@ -42,73 +42,73 @@ but of a *(user, department)* pair.
     │                   │  └─────────────────▶ Rejected
     │          return   │
   Returned ◀────────────┘
-    │  submit (resubmit)
+    │  submit（再提出）
     └────────────────▶ Pending
 ```
 
-## 3. Access control
+## 3. アクセス制御（権限ルール）
 
-Permissions are decided by the combination of the actor, the target department of the request,
-and the actor's role *in that department*.
+権限は「実行者」「申請の申請先部署」「実行者の *その部署での* 役職」の組み合わせで判定する。
 
-### Read
-- R1: A user can read every request whose target department is one of the departments the user belongs to.
-- R2: A user can never read a request whose target department is one the user does not belong to.
+### 閲覧 (Read)
+- R1: ユーザーは、自分が所属しているすべての部署を申請先とする稟議申請を閲覧できる。
+- R2: ユーザーは、自分が所属していない部署を申請先とする稟議申請は一切閲覧できない。
 
-### Update
-- U1 (author): The author can edit their own request only while its status is `Draft` or `Returned`.
-- U2 (other members): A request created by another regular member cannot be edited, even within the same department.
-- U3 (manager): A manager of the target department can edit the request while its status is `Draft`, `Returned` or `Pending`.
+### 編集 (Update)
+- U1（作成者本人）: 自分が作成した申請は、状態が `Draft` または `Returned` のときのみ編集できる。
+- U2（他のメンバー）: 同じ部署であっても、他の一般メンバーが作成した申請は編集できない。
+- U3（上長）: 実行者が申請先部署の上長である場合、状態が `Draft` / `Returned` / `Pending` のいずれかであれば編集できる。
 
-## 4. Actions and state transitions
+## 4. アクションと状態遷移
 
-### A. Create request
-- Actor: any user.
-- Input: the target department.
-- Precondition: the actor belongs to the given target department.
-- Postcondition: a new request exists with status `Draft`, the actor as author and the given department as target.
+### A. 申請の作成 (Create Request)
+- 実行者: 任意のユーザー。
+- 入力: 申請先とする部署。
+- 事前条件: 実行者が指定した申請先部署に所属していること。
+- 事後条件: 新しい申請が生成され、状態は `Draft`。作成者は実行者、申請先部署は入力された部署となる。
 
-### B. Edit request
-- Actor: a user.
-- Precondition: either
-  - the actor is the author and the status is `Draft` or `Returned`, or
-  - the actor is a manager of the target department and the status is `Draft`, `Returned` or `Pending`.
-- Postcondition: the content of the request is updated; the status is unchanged.
+### B. 申請の編集 (Edit Request)
+- 実行者: ユーザー。
+- 事前条件: 次のいずれかを満たすこと。
+  - 実行者が作成者本人であり、状態が `Draft` または `Returned` である。
+  - 実行者が申請先部署の上長であり、状態が `Draft` / `Returned` / `Pending` のいずれかである。
+- 事後条件: 申請の内容が更新される（状態は変化しない）。
 
-### C. Submit / resubmit request
-- Actor: the author of the request.
-- Precondition: the status is `Draft` or `Returned`.
-- Postcondition: the status becomes `Pending`.
+### C. 申請の提出 / 再提出 (Submit Request)
+- 実行者: 申請の作成者。
+- 事前条件: 状態が `Draft` または `Returned` である。
+- 事後条件: 状態が `Pending` に遷移する。
 
-### D. Approve request
-- Actor: a user.
-- Precondition: the status is `Pending` and the actor is a manager of the target department.
-  - Self-approval is allowed: even if the actor is the author, approval is permitted as long as the actor is a manager of the target department.
-- Postcondition: the status becomes `Approved`.
+### D. 申請の承認 (Approve Request)
+- 実行者: ユーザー。
+- 事前条件: 状態が `Pending` であり、実行者が申請先部署の上長であること。
+  - 自己決裁は許可される: 実行者が作成者本人であっても、申請先部署の上長であれば承認可能。
+- 事後条件: 状態が `Approved` に遷移する。
 
-### E. Reject request
-- Actor: a user.
-- Precondition: the status is `Pending` and the actor is a manager of the target department.
-- Postcondition: the status becomes `Rejected`.
+### E. 申請の却下 (Reject Request)
+- 実行者: ユーザー。
+- 事前条件: 状態が `Pending` であり、実行者が申請先部署の上長であること。
+- 事後条件: 状態が `Rejected` に遷移する。
 
-### F. Return request
-- Actor: a user.
-- Precondition: the status is `Pending` and the actor is a manager of the target department.
-- Postcondition: the status becomes `Returned`.
+### F. 申請の差し戻し (Return Request)
+- 実行者: ユーザー。
+- 事前条件: 状態が `Pending` であり、実行者が申請先部署の上長であること。
+- 事後条件: 状態が `Returned` に遷移する。
 
-## 5. Properties to verify (assertions)
+## 5. 検証したい性質（アサーション）
 
-- **P1 — Separation of permissions across affiliations**: a user who is a `Manager` of department X and a
-  `Member` of department Y must not be able to approve their own request targeting department Y.
-  Approval authority depends solely on the actor's role in the target department.
-- **P2 — Terminal states are stable**: once a request is `Approved` or `Rejected`, no action can move it to another status.
-- **P3 — No orphan requests**: for every request there exists at least one user (a manager of its target department)
-  who can approve, reject or return it.
+- **P1 兼務ユーザーの権限分離**: 部署 X の `Manager` かつ部署 Y の `Member` であるユーザーは、自分が作成した
+  部署 Y 宛ての申請を（X での上長権限を根拠に）承認できてはならない。承認可否は常に申請先部署での役職のみで決まる。
+- **P2 終端状態の不変性**: 一度 `Approved` または `Rejected` になった申請は、いかなるアクションによっても
+  別の状態に遷移しない。
+- **P3 迷子申請の不在**: すべての稟議申請には、それを承認・却下・差し戻しできるユーザー（申請先部署の上長）が
+  少なくとも 1 人存在する。
 
-## 6. Modelling notes
+## 6. モデル化時の留意点
 
-- Model roles as a relation over `(User, Department)`. Attaching a role to a user alone loses the essence of the topic (P1).
-- "Every department has at least one manager" is an invariant and is the premise of P3.
-- Self-approval (see D) does not contradict P1: the former covers an actor who is a manager of the target department,
-  the latter an actor who is only a regular member there.
-- Read/update permissions are predicates that do not change state, so they can be expressed separately from the action preconditions.
+- 役職は `(User, Department) -> Role` の関係として表現する。ユーザー単体に役職を持たせると、このお題の本質（P1）が失われる。
+- 「各部署に上長が 1 名以上」は不変条件として置く（P3 の前提となる）。
+- 自己決裁（アクション D の注記）と P1 は矛盾しない。前者は実行者が申請先部署の上長であるケース、後者は
+  申請先部署では一般メンバーであるケースであり、いずれも「承認可否は申請先部署での役職のみで決まる」という
+  同一の規則から導かれる。
+- 閲覧・編集権限は状態遷移を伴わない述語であり、アクションの事前条件とは分けて表現できる。
