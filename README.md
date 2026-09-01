@@ -8,7 +8,7 @@
 
 | お題 | 仕様 | Alloy | TLA+ | Quint |
 | --- | --- | --- | --- | --- |
-| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | [✓](approval_request/alloy/) | - | - |
+| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | [✓](approval_request/alloy/) | [✓](approval_request/tla/) | - |
 
 凡例: ✓ 実装済 / WIP 作業中 / - 未着手
 
@@ -20,7 +20,8 @@
 ├── Makefile                  # make verify で全モデルを検証
 ├── approval_request/         # お題1: 稟議申請システム
 │   ├── spec.md               # お題の仕様・要件定義（自然言語）
-│   └── alloy/                # Alloy 6 モデル（README.md + approval.als）
+│   ├── alloy/                # Alloy 6 モデル（README.md + approval.als）
+│   └── tla/                  # TLA+ モデル（README.md + *.tla + TLC モデル *.cfg）
 └── scripts/                  # 検証ドライバなどの自動化スクリプト
 ```
 
@@ -29,10 +30,12 @@
 ```console
 $ make help      # 使えるターゲットの一覧
 $ make verify    # 全モデルの check / run を実行して結果を集計
+$ make verify-alloy   # Alloy 6 のモデルだけ
+$ make verify-tla     # TLA+（TLC）のモデルだけ
 ```
 
-必要なのは Java 17 以降と Python 3.8 以降のみで、モデル検査器の本体（Alloy など）は初回実行時に `.tools/` へ自動ダウンロードされる。
-個別のモデルだけを回す方法や GUI の起動方法は各言語ディレクトリの README を参照（例: [Alloy](approval_request/alloy/README.md)）。
+必要なのは Java 17 以降と Python 3.8 以降のみで、モデル検査器の本体（Alloy、TLA+ Tools）は初回実行時に `.tools/` へ自動ダウンロードされる。
+個別のモデルだけを回す方法や GUI の起動方法は各言語ディレクトリの README を参照（[Alloy](approval_request/alloy/README.md) / [TLA+](approval_request/tla/README.md)）。
 検証はプルリクエストごとに GitHub Actions でも実行される（[.github/workflows/verify.yml](.github/workflows/verify.yml)）。
 
 ## お題の追加
