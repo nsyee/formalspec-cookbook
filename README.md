@@ -8,7 +8,7 @@
 
 | お題 | 仕様 | Alloy | TLA+ | Quint |
 | --- | --- | --- | --- | --- |
-| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | [✓](approval_request/alloy/) | [✓](approval_request/tla/) | - |
+| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | [✓](approval_request/alloy/) | [✓](approval_request/tla/) | [✓](approval_request/quint/) |
 
 凡例: ✓ 実装済 / WIP 作業中 / - 未着手
 
@@ -21,7 +21,8 @@
 ├── approval_request/         # お題1: 稟議申請システム
 │   ├── spec.md               # お題の仕様・要件定義（自然言語）
 │   ├── alloy/                # Alloy 6 モデル（README.md + approval.als）
-│   └── tla/                  # TLA+ モデル（README.md + *.tla + TLC モデル *.cfg）
+│   ├── tla/                  # TLA+ モデル（README.md + *.tla + TLC モデル *.cfg）
+│   └── quint/                # Quint モデル（README.md + *.qnt + 検査一覧 checks.json）
 └── scripts/                  # 検証ドライバなどの自動化スクリプト
 ```
 
@@ -32,10 +33,12 @@ $ make help      # 使えるターゲットの一覧
 $ make verify    # 全モデルの check / run を実行して結果を集計
 $ make verify-alloy   # Alloy 6 のモデルだけ
 $ make verify-tla     # TLA+（TLC）のモデルだけ
+$ make verify-quint   # Quint（シナリオテスト・シミュレーション・Apalache/TLC）のモデルだけ
 ```
 
 必要なのは Java 17 以降と Python 3.8 以降のみで、モデル検査器の本体（Alloy、TLA+ Tools）は初回実行時に `.tools/` へ自動ダウンロードされる。
-個別のモデルだけを回す方法や GUI の起動方法は各言語ディレクトリの README を参照（[Alloy](approval_request/alloy/README.md) / [TLA+](approval_request/tla/README.md)）。
+Quint は追加で Node.js 18 以降を必要とし、Quint CLI が `.tools/` に、Apalache と TLC が Quint 自身によって `~/.quint/` へ取得される。
+個別のモデルだけを回す方法や GUI の起動方法は各言語ディレクトリの README を参照（[Alloy](approval_request/alloy/README.md) / [TLA+](approval_request/tla/README.md) / [Quint](approval_request/quint/README.md)）。
 検証はプルリクエストごとに GitHub Actions でも実行される（[.github/workflows/verify.yml](.github/workflows/verify.yml)）。
 
 ## お題の追加
