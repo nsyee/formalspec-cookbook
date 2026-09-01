@@ -2,23 +2,30 @@ ALLOY := ./scripts/alloy.py
 ALLOY_MODELS := $(wildcard */alloy/*.als)
 TLA := ./scripts/tla.py
 TLA_DIRS := $(wildcard */tla)
+QUINT := ./scripts/quint.py
+QUINT_DIRS := $(wildcard */quint)
 
-.PHONY: help verify verify-alloy verify-tla commands models clean
+.PHONY: help verify verify-alloy verify-tla verify-quint commands models checks clean
 
 help:
 	@echo "make verify         # run every model checker in this repository"
 	@echo "make verify-alloy   # run the Alloy 6 models ($(ALLOY_MODELS))"
 	@echo "make verify-tla     # run the TLA+ models with TLC ($(TLA_DIRS))"
+	@echo "make verify-quint   # run the Quint models ($(QUINT_DIRS))"
 	@echo "make commands       # list the commands of every Alloy model"
 	@echo "make models         # list the TLC models"
+	@echo "make checks         # list the Quint checks"
 	@echo "make clean          # remove downloaded tools"
 	@echo
 	@echo "single model: $(ALLOY) verify approval_request/alloy/approval.als"
 	@echo "single command: $(ALLOY) trace approval_request/alloy/approval.als selfApprovalIsAllowed"
 	@echo "single TLC model: $(TLA) verify approval_request/tla --only MCSafety"
 	@echo "TLC counterexample: $(TLA) trace approval_request/tla/MCScenarioRoundTrip.cfg"
+	@echo "single Quint check: $(QUINT) verify approval_request/quint --only safety"
+	@echo "Quint counterexample: $(QUINT) trace approval_request/quint --only liveness-no-fairness"
+	@echo "Quint typecheck: $(QUINT) typecheck approval_request/quint/models.qnt"
 
-verify: verify-alloy verify-tla
+verify: verify-alloy verify-tla verify-quint
 
 verify-alloy:
 	@set -e; for model in $(ALLOY_MODELS); do \
@@ -32,6 +39,12 @@ verify-tla:
 		$(TLA) verify $$dir; \
 	done
 
+verify-quint:
+	@set -e; for dir in $(QUINT_DIRS); do \
+		echo "== $$dir"; \
+		$(QUINT) verify $$dir; \
+	done
+
 commands:
 	@set -e; for model in $(ALLOY_MODELS); do \
 		echo "== $$model"; \
@@ -42,6 +55,12 @@ models:
 	@set -e; for dir in $(TLA_DIRS); do \
 		echo "== $$dir"; \
 		$(TLA) models $$dir; \
+	done
+
+checks:
+	@set -e; for dir in $(QUINT_DIRS); do \
+		echo "== $$dir"; \
+		$(QUINT) checks $$dir; \
 	done
 
 clean:

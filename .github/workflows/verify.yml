@@ -35,3 +35,23 @@ jobs:
           path: .tools
           key: tla-${{ hashFiles('scripts/tla.py') }}
       - run: make verify-tla
+
+  quint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Cache the Quint CLI and its backends
+        uses: actions/cache@v4
+        with:
+          path: |
+            .tools
+            ~/.quint
+          key: quint-${{ hashFiles('scripts/quint.py') }}
+      - run: make verify-quint
