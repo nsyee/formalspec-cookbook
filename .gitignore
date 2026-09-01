@@ -1,1 +1,4 @@
 .tools/
+states/
+*_TTrace_*.tla
+__pycache__/
