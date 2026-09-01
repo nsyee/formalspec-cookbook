@@ -3,3 +3,5 @@ states/
 *_TTrace_*.tla
 *_TTrace_*.bin
 __pycache__/
+_apalache-out/
+tmp/

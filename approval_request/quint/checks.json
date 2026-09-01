@@ -1,0 +1,74 @@
+{
+  "spec": "models.qnt",
+  "checks": [
+    {
+      "name": "tests",
+      "kind": "test",
+      "main": "scenarios",
+      "expect": "ok"
+    },
+    {
+      "name": "safety",
+      "kind": "verify",
+      "main": "smallModel",
+      "backend": "tlc",
+      "invariants": [
+        "safety",
+        "eventsAreAuthorized",
+        "statusFollowsStateMachine",
+        "terminalRequestsAreFrozen"
+      ],
+      "expect": "ok"
+    },
+    {
+      "name": "safety-symbolic",
+      "kind": "verify",
+      "main": "smallModel",
+      "backend": "apalache",
+      "max_steps": 8,
+      "invariants": [
+        "safety",
+        "eventsAreAuthorized",
+        "statusFollowsStateMachine",
+        "terminalRequestsAreFrozen"
+      ],
+      "expect": "ok"
+    },
+    {
+      "name": "liveness",
+      "kind": "verify",
+      "main": "smallModel",
+      "backend": "tlc",
+      "temporal": ["liveness"],
+      "expect": "ok"
+    },
+    {
+      "name": "liveness-no-fairness",
+      "kind": "verify",
+      "main": "smallModel",
+      "backend": "tlc",
+      "temporal": ["pendingIsEventuallyDecided"],
+      "expect": "violation"
+    },
+    {
+      "name": "simulation",
+      "kind": "run",
+      "main": "simulatedModel",
+      "max_steps": 14,
+      "max_samples": 500,
+      "invariants": [
+        "safety",
+        "eventsAreAuthorized",
+        "statusFollowsStateMachine",
+        "terminalRequestsAreFrozen"
+      ],
+      "witnesses": [
+        "witnessSelfDecision",
+        "witnessManagerEditedOthersRequest",
+        "witnessReturned",
+        "witnessBothRequestsTerminal"
+      ],
+      "expect": "ok"
+    }
+  ]
+}
