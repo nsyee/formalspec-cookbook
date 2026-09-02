@@ -82,3 +82,14 @@ jobs:
           path: .tools
           key: souther-${{ hashFiles('scripts/souther.py') }}
       - run: make verify-souther
+
+  dafny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache the Dafny distribution
+        uses: actions/cache@v4
+        with:
+          path: .tools
+          key: dafny-${{ runner.os }}-${{ hashFiles('scripts/dafny.py') }}
+      - run: make verify-dafny
