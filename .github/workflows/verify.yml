@@ -67,3 +67,18 @@ jobs:
           path: .tools
           key: cedar-${{ runner.os }}-${{ hashFiles('scripts/cedar.py') }}
       - run: make verify-cedar
+
+  souther:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - name: Cache the Souther CLI
+        uses: actions/cache@v4
+        with:
+          path: .tools
+          key: souther-${{ hashFiles('scripts/souther.py') }}
+      - run: make verify-souther

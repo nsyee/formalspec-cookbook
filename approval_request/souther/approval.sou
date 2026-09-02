@@ -1,0 +1,288 @@
+// Approval Request workflow in Souther.
+//
+// What Souther adds over the other models in this repository is that the
+// specification is *executable*: every `example` row below is checked by the
+// compiler, and every behavior can be run from the CLI with JSON input.
+//
+// Modeling decisions (README.md in this directory compares them with the
+// other models):
+//   - Status is a sum of product data, one case per state. Each state carries
+//     only the fields that exist in that state (an approver only exists once
+//     the request is Approved), so an illegal combination is not writable.
+//   - A behavior's input type *is* its precondition on state. `approve` takes
+//     a `Pending`, not a `Request`, so approving a Draft or a terminal request
+//     is a compile error rather than a runtime denial (property P2).
+//   - Contextual roles `(User, Department) -> Role` are a `Directory` value,
+//     passed as input data (a set invariant is input, not a hidden dependency).
+//     Its invariants encode "one role per affiliation" and P3 ("every
+//     department has a manager").
+//   - Denials are ordinary sum cases (`NotAffiliated`, `NotAuthor`,
+//     `NotManager`), not exceptions. Callers `match` on them.
+//   - `decide` is the single entry point for the CLI: it accepts any
+//     `Request` and any `Command` and maps the pair to a transition or a
+//     denial, so `TerminalRequest` and `WrongState` are the only places a
+//     state/command mismatch is answered at run time.
+module approval_request
+
+// === Identifiers ===
+data UserId = String
+    invariant nonEmpty = String.length(value) > 0
+
+data DepartmentId = String
+    invariant nonEmpty = String.length(value) > 0
+
+// === Contextual roles: (User, Department) -> Role ===
+// A user may belong to several departments with a different role in each.
+// Manager is a role *within* one department, never a global attribute.
+data Role = Member | Manager
+
+data Affiliation =
+    { user: UserId
+    , department: DepartmentId
+    , role: Role
+    }
+
+let affiliationKey (a: Affiliation): String = a.user.value ++ "@" ++ a.department.value
+
+let hasManager (department: DepartmentId, entries: List<Affiliation>): Bool =
+    List.any(a -> a.department == department && a.role == Manager, entries)
+
+// The whole role assignment of the organisation. Uniqueness and P3 are
+// properties of the set, so they live on the set's invariant.
+data Directory = List<Affiliation>
+    invariant oneRolePerAffiliation = List.allDistinctBy(affiliationKey, value)
+    invariant everyDepartmentHasManager = List.all(a -> hasManager(a.department, value), value)
+
+let affiliationOf (directory: Directory, user: UserId, department: DepartmentId) =
+    List.find(a -> a.user == user && a.department == department, directory.value)
+
+let isAffiliated (directory: Directory, user: UserId, department: DepartmentId): Bool =
+    match affiliationOf(directory, user, department) with
+        | Some a -> true
+        | None -> false
+
+let isManagerOf (directory: Directory, user: UserId, department: DepartmentId): Bool =
+    match affiliationOf(directory, user, department) with
+        | Some a -> a.role == Manager
+        | None -> false
+
+// === Request content ===
+data Title = String
+    invariant nonEmpty = String.length(value) > 0
+
+data Amount = Int
+    invariant nonNegative = value >= 0
+
+data Content =
+    { title: Title
+    , amount: Amount
+    }
+
+// === Request states ===
+// Fields shared by every state. The author and the target department never
+// change once the request exists, and who acted on it is recorded only in
+// the state where that act happened.
+data RequestCore =
+    { author: UserId
+    , department: DepartmentId
+    , content: Content
+    }
+
+data Draft =
+    { ...RequestCore
+    }
+data Pending =
+    { ...RequestCore
+    }
+data Returned =
+    { ...RequestCore
+    , returnedBy: UserId
+    }
+data Approved =
+    { ...RequestCore
+    , approvedBy: UserId
+    }
+data Rejected =
+    { ...RequestCore
+    , rejectedBy: UserId
+    }
+
+data Request = Draft | Pending | Returned | Approved | Rejected
+
+// Input aliases: which states an action may start from. A behavior typed
+// on one of these refuses the other states at compile time; Approved and
+// Rejected appear in none of them (P2).
+data Editable = Draft | Pending | Returned
+data Submittable = Draft | Returned
+
+// === Denials ===
+data NotAffiliated
+data NotAuthor
+data NotManager
+data TerminalRequest
+data WrongState
+
+data Denied = NotAffiliated | NotAuthor | NotManager | TerminalRequest | WrongState
+
+// === Directory registration ===
+// The only way to obtain a Directory is to attempt its construction. Each
+// invariant clause departs to its own case, so the caller learns which rule
+// broke without the rule being restated here.
+behavior registerDirectory : (
+    entries: List<Affiliation>
+) -> Directory | DuplicateAffiliation | DepartmentWithoutManager
+    constructs Directory
+
+let registerDirectory (entries) = {
+    guard Directory(entries) as directory else
+        | oneRolePerAffiliation -> DuplicateAffiliation
+        | everyDepartmentHasManager -> DepartmentWithoutManager
+    directory
+}
+
+// === Create (requirement A) ===
+// Any affiliated user of the target department may create a Draft there.
+// Amount and Title are attempted, so invalid content is a case, not an abort.
+behavior create : (
+    directory: Directory,
+    author: UserId,
+    department: DepartmentId,
+    title: String,
+    amount: Int
+) -> Draft | NotAffiliated | InvalidContent
+    constructs Draft, Content, Title, Amount
+    ensures Draft -> value.author == author && value.department == department
+
+let create (directory, author, department, title, amount) = {
+    guard isAffiliated(directory, author, department) else NotAffiliated
+    guard Title(title) as t else InvalidContent
+    guard Amount(amount) as a else InvalidContent
+    Draft { author = author, department = department, content = Content { title = t, amount = a } }
+}
+
+// === Read (requirements R1, R2) ===
+// Reading is a predicate, not a transition: the request comes back unchanged
+// or the reader is denied. Nothing is constructed.
+behavior read : (directory: Directory, reader: UserId, request: Request) -> Request | NotAffiliated
+
+let read (directory, reader, request) = {
+    guard isAffiliated(directory, reader, request.department) else NotAffiliated
+    request
+}
+
+// === Edit (requirements U1, U2, U3) ===
+// The author may edit a Draft or a Returned request; the target department's
+// manager may additionally edit a Pending one. The state is preserved: the
+// `match` rebuilds the same case with new content.
+let canEdit (directory: Directory, editor: UserId, request: Editable): Bool =
+    match request with
+        | Draft -> editor == request.author || isManagerOf(directory, editor, request.department)
+        | Returned -> editor == request.author || isManagerOf(directory, editor, request.department)
+        | Pending -> isManagerOf(directory, editor, request.department)
+
+behavior edit : (
+    directory: Directory,
+    editor: UserId,
+    request: Editable,
+    content: Content
+) -> Editable | NotAuthor | NotManager
+    constructs Draft, Pending, Returned
+    ensures sameAuthor = Draft | Pending | Returned -> value.author == request.author
+    ensures newContent = Draft | Pending | Returned -> value.content == content
+
+let edit (directory, editor, request, content) = {
+    guard canEdit(directory, editor, request)
+        else match request with
+            | Pending -> NotManager
+            | Draft | Returned -> NotAuthor
+    match request with
+        | Draft as d -> Draft { ...d, content }
+        | Pending as p -> Pending { ...p, content }
+        | Returned as r -> Returned { ...r, content }
+}
+
+// === Submit (requirement C) ===
+// Only the author submits, from Draft or Returned. Resubmission drops the
+// `returnedBy` field because Pending does not declare it.
+behavior submit : (actor: UserId, request: Submittable) -> Pending | NotAuthor
+    constructs Pending
+    ensures Pending -> value.author == request.author
+
+let submit (actor, request) = {
+    guard actor == request.author else NotAuthor
+    Pending { ...request }
+}
+
+// === Approve / Reject / Return (requirements D, E, F) ===
+// Only a manager *of the target department* decides. Self-approval is
+// allowed: the rule is about the actor's role in the target department, not
+// about whether the actor is the author. A manager of another department is
+// NotManager here even if the author reports to them elsewhere (P1).
+behavior approve : (directory: Directory, actor: UserId, request: Pending) -> Approved | NotManager
+    constructs Approved
+    ensures Approved -> value.approvedBy == actor && value.author == request.author
+
+let approve (directory, actor, request) = {
+    guard isManagerOf(directory, actor, request.department) else NotManager
+    Approved { ...request, approvedBy = actor }
+}
+
+behavior reject : (directory: Directory, actor: UserId, request: Pending) -> Rejected | NotManager
+    constructs Rejected
+    ensures Rejected -> value.rejectedBy == actor && value.author == request.author
+
+let reject (directory, actor, request) = {
+    guard isManagerOf(directory, actor, request.department) else NotManager
+    Rejected { ...request, rejectedBy = actor }
+}
+
+behavior return : (directory: Directory, actor: UserId, request: Pending) -> Returned | NotManager
+    constructs Returned
+    ensures Returned -> value.returnedBy == actor && value.author == request.author
+
+let return (directory, actor, request) = {
+    guard isManagerOf(directory, actor, request.department) else NotManager
+    Returned { ...request, returnedBy = actor }
+}
+
+// === Decide: the dynamic entry point ===
+// The typed behaviors above make illegal transitions unwritable. The outside
+// world, however, sends an arbitrary command against an arbitrary request, so
+// `decide` narrows the pair and delegates. Every (state, command) cell is
+// answered; the compiler refuses a missing one. An actor who could not even
+// read the request learns nothing about its state: NotAffiliated comes first.
+data EditCommand =
+    { content: Content
+    }
+
+data Command = EditCommand | SubmitCommand | ApproveCommand | RejectCommand | ReturnCommand
+
+behavior decide : (
+    directory: Directory,
+    actor: UserId,
+    request: Request,
+    command: Command
+) -> Request | Denied
+
+let decide (directory, actor, request, command) = {
+    guard isAffiliated(directory, actor, request.department) else NotAffiliated
+    match request with
+        | Approved | Rejected -> TerminalRequest
+        | Draft as d
+            -> match command with
+                | EditCommand { content } -> edit(directory, actor, d, content)
+                | SubmitCommand -> submit(actor, d)
+                | ApproveCommand | RejectCommand | ReturnCommand -> WrongState
+        | Returned as r
+            -> match command with
+                | EditCommand { content } -> edit(directory, actor, r, content)
+                | SubmitCommand -> submit(actor, r)
+                | ApproveCommand | RejectCommand | ReturnCommand -> WrongState
+        | Pending as p
+            -> match command with
+                | EditCommand { content } -> edit(directory, actor, p, content)
+                | SubmitCommand -> WrongState
+                | ApproveCommand -> approve(directory, actor, p)
+                | RejectCommand -> reject(directory, actor, p)
+                | ReturnCommand -> return(directory, actor, p)
+}
