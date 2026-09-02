@@ -8,10 +8,12 @@ CEDAR := ./scripts/cedar.py
 CEDAR_DIRS := $(wildcard */cedar)
 SOUTHER := ./scripts/souther.py
 SOUTHER_DIRS := $(wildcard */souther)
+LEAN := ./scripts/lean.py
+LEAN_DIRS := $(wildcard */lean)
 DAFNY := ./scripts/dafny.py
 DAFNY_DIRS := $(wildcard */dafny)
 
-.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-dafny commands models checks clean
+.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny commands models checks clean
 
 help:
 	@echo "make verify         # run every model checker in this repository"
@@ -20,10 +22,11 @@ help:
 	@echo "make verify-quint   # run the Quint models ($(QUINT_DIRS))"
 	@echo "make verify-cedar   # run the Cedar models ($(CEDAR_DIRS))"
 	@echo "make verify-souther # run the Souther models ($(SOUTHER_DIRS))"
+	@echo "make verify-lean    # check the Lean 4 models and proofs ($(LEAN_DIRS))"
 	@echo "make verify-dafny   # run the Dafny models ($(DAFNY_DIRS))"
 	@echo "make commands       # list the commands of every Alloy model"
 	@echo "make models         # list the TLC models"
-	@echo "make checks         # list the Quint, Cedar, Souther and Dafny checks"
+	@echo "make checks         # list the Quint, Cedar, Souther, Lean and Dafny checks"
 	@echo "make clean          # remove downloaded tools"
 	@echo
 	@echo "single model: $(ALLOY) verify approval_request/alloy/approval.als"
@@ -40,11 +43,14 @@ help:
 	@echo "single Souther check: $(SOUTHER) verify approval_request/souther --only examples"
 	@echo "Souther example report: $(SOUTHER) examples approval_request/souther"
 	@echo "Souther behavior run: $(SOUTHER) run approval_request/souther approve '[...directory...]' '\"bob\"' '{\"author\":\"alice\",...}'"
+	@echo "single Lean check: $(LEAN) verify approval_request/lean --only axioms"
+	@echo "Lean scenario replay: $(LEAN) run approval_request/lean cross-affiliation"
+	@echo "Lean raw lake: $(LEAN) lake approval_request/lean build"
 	@echo "single Dafny check: $(DAFNY) verify approval_request/dafny --only verify"
 	@echo "Dafny verification error: $(DAFNY) trace approval_request/dafny --only negative-authority-leak"
 	@echo "Dafny model run: $(DAFNY) run approval_request/dafny 'alice create sales laptop 1500' 'alice submit 0'"
 
-verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-dafny
+verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny
 
 verify-alloy:
 	@set -e; for model in $(ALLOY_MODELS); do \
@@ -74,6 +80,12 @@ verify-souther:
 	@set -e; for dir in $(SOUTHER_DIRS); do \
 		echo "== $$dir"; \
 		$(SOUTHER) verify $$dir; \
+	done
+
+verify-lean:
+	@set -e; for dir in $(LEAN_DIRS); do \
+		echo "== $$dir"; \
+		$(LEAN) verify $$dir; \
 	done
 
 verify-dafny:
@@ -106,6 +118,10 @@ checks:
 	@set -e; for dir in $(SOUTHER_DIRS); do \
 		echo "== $$dir"; \
 		$(SOUTHER) checks $$dir; \
+	done
+	@set -e; for dir in $(LEAN_DIRS); do \
+		echo "== $$dir"; \
+		$(LEAN) checks $$dir; \
 	done
 	@set -e; for dir in $(DAFNY_DIRS); do \
 		echo "== $$dir"; \
