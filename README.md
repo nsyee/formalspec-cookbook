@@ -6,9 +6,9 @@
 
 ## 対応表（マトリクス）
 
-| お題 | 仕様 | Alloy | TLA+ | Quint | Cedar |
-| --- | --- | --- | --- | --- | --- |
-| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | [✓](approval_request/alloy/) | [✓](approval_request/tla/) | [✓](approval_request/quint/) | [✓](approval_request/cedar/) |
+| お題 | 仕様 | Alloy | TLA+ | Quint | Cedar | Souther |
+| --- | --- | --- | --- | --- | --- | --- |
+| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | [✓](approval_request/alloy/) | [✓](approval_request/tla/) | [✓](approval_request/quint/) | [✓](approval_request/cedar/) | [✓](approval_request/souther/) |
 
 凡例: ✓ 実装済 / WIP 作業中 / - 未着手
 
@@ -23,7 +23,8 @@
 │   ├── alloy/                # Alloy 6 モデル（README.md + approval.als）
 │   ├── tla/                  # TLA+ モデル（README.md + *.tla + TLC モデル *.cfg）
 │   ├── quint/                # Quint モデル（README.md + *.qnt + 検査一覧 checks.json）
-│   └── cedar/                # Cedar 認可モデル（README.md + *.cedarschema + *.cedar + 検査一覧 checks.json）
+│   ├── cedar/                # Cedar 認可モデル（README.md + *.cedarschema + *.cedar + 検査一覧 checks.json）
+│   └── souther/              # Souther 実行可能仕様（README.md + *.sou + コンパイル時に検査される *.examples.sou）
 └── scripts/                  # 検証ドライバなどの自動化スクリプト
 ```
 
@@ -36,12 +37,14 @@ $ make verify-alloy   # Alloy 6 のモデルだけ
 $ make verify-tla     # TLA+（TLC）のモデルだけ
 $ make verify-quint   # Quint（シナリオテスト・シミュレーション・Apalache/TLC）のモデルだけ
 $ make verify-cedar   # Cedar（validate・run-tests・SymCC による記号的検証）のモデルだけ
+$ make verify-souther # Souther（fmt・compile・examples --strict による網羅性つき例検査）のモデルだけ
 ```
 
 必要なのは Java 17 以降と Python 3.8 以降のみで、モデル検査器の本体（Alloy、TLA+ Tools）は初回実行時に `.tools/` へ自動ダウンロードされる。
 Quint は追加で Node.js 18 以降を必要とし、Quint CLI が `.tools/` に、Apalache と TLC が Quint 自身によって `~/.quint/` へ取得される。
 Cedar は追加で Rust 1.89 以降（cargo）を必要とし、Cedar CLI が `.tools/` にビルドされ、SMT ソルバー cvc5 が `.tools/` へダウンロードされる。
-個別のモデルだけを回す方法や GUI の起動方法は各言語ディレクトリの README を参照（[Alloy](approval_request/alloy/README.md) / [TLA+](approval_request/tla/README.md) / [Quint](approval_request/quint/README.md) / [Cedar](approval_request/cedar/README.md)）。
+Souther は Java 25 を必要とし、`PATH` / `JAVA_HOME` の Java が古い場合は Temurin JDK 25 が `.tools/jdk-25/` へ、Souther CLI（自己実行 jar）が `.tools/souther/` へダウンロードされる。
+個別のモデルだけを回す方法や GUI の起動方法は各言語ディレクトリの README を参照（[Alloy](approval_request/alloy/README.md) / [TLA+](approval_request/tla/README.md) / [Quint](approval_request/quint/README.md) / [Cedar](approval_request/cedar/README.md) / [Souther](approval_request/souther/README.md)）。
 検証はプルリクエストごとに GitHub Actions でも実行される（[.github/workflows/verify.yml](.github/workflows/verify.yml)）。
 
 ## お題の追加

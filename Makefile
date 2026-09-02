@@ -6,8 +6,10 @@ QUINT := ./scripts/quint.py
 QUINT_DIRS := $(wildcard */quint)
 CEDAR := ./scripts/cedar.py
 CEDAR_DIRS := $(wildcard */cedar)
+SOUTHER := ./scripts/souther.py
+SOUTHER_DIRS := $(wildcard */souther)
 
-.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar commands models checks clean
+.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther commands models checks clean
 
 help:
 	@echo "make verify         # run every model checker in this repository"
@@ -15,9 +17,10 @@ help:
 	@echo "make verify-tla     # run the TLA+ models with TLC ($(TLA_DIRS))"
 	@echo "make verify-quint   # run the Quint models ($(QUINT_DIRS))"
 	@echo "make verify-cedar   # run the Cedar models ($(CEDAR_DIRS))"
+	@echo "make verify-souther # run the Souther models ($(SOUTHER_DIRS))"
 	@echo "make commands       # list the commands of every Alloy model"
 	@echo "make models         # list the TLC models"
-	@echo "make checks         # list the Quint and Cedar checks"
+	@echo "make checks         # list the Quint, Cedar and Souther checks"
 	@echo "make clean          # remove downloaded tools"
 	@echo
 	@echo "single model: $(ALLOY) verify approval_request/alloy/approval.als"
@@ -31,8 +34,11 @@ help:
 	@echo "Cedar counterexample: $(CEDAR) trace approval_request/cedar --only D-self-approval-without-hierarchy-assumption"
 	@echo "Cedar request: $(CEDAR) authorize approval_request/cedar 'User::\"alice\"' 'Action::\"approve\"' 'Request::\"dev/pending-by-alice\"'"
 	@echo "Cedar decision table: $(CEDAR) matrix approval_request/cedar"
+	@echo "single Souther check: $(SOUTHER) verify approval_request/souther --only examples"
+	@echo "Souther example report: $(SOUTHER) examples approval_request/souther"
+	@echo "Souther behavior run: $(SOUTHER) run approval_request/souther approve '[...directory...]' '\"bob\"' '{\"author\":\"alice\",...}'"
 
-verify: verify-alloy verify-tla verify-quint verify-cedar
+verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther
 
 verify-alloy:
 	@set -e; for model in $(ALLOY_MODELS); do \
@@ -58,6 +64,12 @@ verify-cedar:
 		$(CEDAR) verify $$dir; \
 	done
 
+verify-souther:
+	@set -e; for dir in $(SOUTHER_DIRS); do \
+		echo "== $$dir"; \
+		$(SOUTHER) verify $$dir; \
+	done
+
 commands:
 	@set -e; for model in $(ALLOY_MODELS); do \
 		echo "== $$model"; \
@@ -78,6 +90,10 @@ checks:
 	@set -e; for dir in $(CEDAR_DIRS); do \
 		echo "== $$dir"; \
 		$(CEDAR) checks $$dir; \
+	done
+	@set -e; for dir in $(SOUTHER_DIRS); do \
+		echo "== $$dir"; \
+		$(SOUTHER) checks $$dir; \
 	done
 
 clean:
