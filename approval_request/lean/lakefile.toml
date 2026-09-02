@@ -1,0 +1,9 @@
+name = "approval"
+defaultTargets = ["Approval", "approval"]
+
+[[lean_lib]]
+name = "Approval"
+
+[[lean_exe]]
+name = "approval"
+root = "Main"
