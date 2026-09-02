@@ -93,3 +93,14 @@ jobs:
           path: .tools
           key: lean-${{ runner.os }}-${{ hashFiles('scripts/lean.py', '**/lean-toolchain') }}
       - run: make verify-lean
+
+  dafny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache the Dafny distribution
+        uses: actions/cache@v4
+        with:
+          path: .tools
+          key: dafny-${{ runner.os }}-${{ hashFiles('scripts/dafny.py') }}
+      - run: make verify-dafny

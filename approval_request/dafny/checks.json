@@ -1,0 +1,50 @@
+{
+  "entry": "Demo.dfy",
+  "checks": [
+    {
+      "name": "format",
+      "kind": "format",
+      "files": ["*.dfy", "negative/*.dfy"],
+      "description": "every source is in the canonical form of dafny format"
+    },
+    {
+      "name": "verify",
+      "kind": "verify",
+      "files": ["*.dfy"],
+      "description": "the model, the lemmas of Properties.dfy and the workflow class verify"
+    },
+    {
+      "name": "tests",
+      "kind": "test",
+      "files": ["Scenarios.dfy"],
+      "description": "the scenarios of spec.md run and their expectations hold"
+    },
+    {
+      "name": "run",
+      "kind": "run",
+      "files": ["Demo.dfy"],
+      "description": "the compiled model executes its default session"
+    },
+    {
+      "name": "negative-authority-leak",
+      "kind": "verify",
+      "files": ["negative/AuthorityLeak.dfy"],
+      "expect": "violation",
+      "description": "P1: a manager of another department must not be able to decide"
+    },
+    {
+      "name": "negative-directory-without-manager",
+      "kind": "verify",
+      "files": ["negative/DirectoryWithoutManager.dfy"],
+      "expect": "violation",
+      "description": "a managerless assignment is not a Directory, and a Draft cannot be approved"
+    },
+    {
+      "name": "negative-author-edits-pending",
+      "kind": "verify",
+      "files": ["negative/AuthorEditsPending.dfy"],
+      "expect": "violation",
+      "description": "U1: the author must not be able to edit a Pending request"
+    }
+  ]
+}

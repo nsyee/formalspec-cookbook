@@ -4,5 +4,6 @@ states/
 *_TTrace_*.bin
 __pycache__/
 _apalache-out/
+*-py/
 tmp/
 .lake/
