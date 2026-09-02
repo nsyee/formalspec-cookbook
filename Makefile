@@ -8,8 +8,10 @@ CEDAR := ./scripts/cedar.py
 CEDAR_DIRS := $(wildcard */cedar)
 SOUTHER := ./scripts/souther.py
 SOUTHER_DIRS := $(wildcard */souther)
+LEAN := ./scripts/lean.py
+LEAN_DIRS := $(wildcard */lean)
 
-.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther commands models checks clean
+.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean commands models checks clean
 
 help:
 	@echo "make verify         # run every model checker in this repository"
@@ -18,9 +20,10 @@ help:
 	@echo "make verify-quint   # run the Quint models ($(QUINT_DIRS))"
 	@echo "make verify-cedar   # run the Cedar models ($(CEDAR_DIRS))"
 	@echo "make verify-souther # run the Souther models ($(SOUTHER_DIRS))"
+	@echo "make verify-lean    # check the Lean 4 models and proofs ($(LEAN_DIRS))"
 	@echo "make commands       # list the commands of every Alloy model"
 	@echo "make models         # list the TLC models"
-	@echo "make checks         # list the Quint, Cedar and Souther checks"
+	@echo "make checks         # list the Quint, Cedar, Souther and Lean checks"
 	@echo "make clean          # remove downloaded tools"
 	@echo
 	@echo "single model: $(ALLOY) verify approval_request/alloy/approval.als"
@@ -37,8 +40,11 @@ help:
 	@echo "single Souther check: $(SOUTHER) verify approval_request/souther --only examples"
 	@echo "Souther example report: $(SOUTHER) examples approval_request/souther"
 	@echo "Souther behavior run: $(SOUTHER) run approval_request/souther approve '[...directory...]' '\"bob\"' '{\"author\":\"alice\",...}'"
+	@echo "single Lean check: $(LEAN) verify approval_request/lean --only axioms"
+	@echo "Lean scenario replay: $(LEAN) run approval_request/lean cross-affiliation"
+	@echo "Lean raw lake: $(LEAN) lake approval_request/lean build"
 
-verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther
+verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean
 
 verify-alloy:
 	@set -e; for model in $(ALLOY_MODELS); do \
@@ -70,6 +76,12 @@ verify-souther:
 		$(SOUTHER) verify $$dir; \
 	done
 
+verify-lean:
+	@set -e; for dir in $(LEAN_DIRS); do \
+		echo "== $$dir"; \
+		$(LEAN) verify $$dir; \
+	done
+
 commands:
 	@set -e; for model in $(ALLOY_MODELS); do \
 		echo "== $$model"; \
@@ -94,6 +106,10 @@ checks:
 	@set -e; for dir in $(SOUTHER_DIRS); do \
 		echo "== $$dir"; \
 		$(SOUTHER) checks $$dir; \
+	done
+	@set -e; for dir in $(LEAN_DIRS); do \
+		echo "== $$dir"; \
+		$(LEAN) checks $$dir; \
 	done
 
 clean:
