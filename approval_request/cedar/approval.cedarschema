@@ -1,0 +1,75 @@
+// 稟議申請システム（兼務を前提としたワークフローと権限モデル）の Cedar スキーマ。
+//
+// 自然言語での仕様は ../spec.md を参照。
+//
+// Alloy / TLA+ / Quint 版が「システムの状態遷移」をモデル化するのに対し、
+// Cedar がモデル化するのは各アクションの **認可判定の境界** である。
+//   - 事前条件（誰が・どの状態の申請に・何をしてよいか）→ 認可ポリシー（approval.cedar）
+//   - 事後条件（状態がどう変わるか）              → アプリケーション側の責務（モデル外）
+//
+// モデル化の方針:
+//   - 所属と役職は属性ではなく **エンティティ階層（in）** で表す。
+//       User ∈ Team ∈ Department、かつ 各部署の managers チーム ∈ members チーム
+//     とすることで、「所属している」は principal in Department、「上長である」は
+//     principal in Department.managers という 1 つの `in` で判定できる。
+//     兼務は単に User が複数の Team を親に持つことで表せる。
+//   - 役職が (ユーザー, 部署) の組に対して定まるという spec.md §6 の要請は、
+//     Team が必ず 1 つの Department に属することで自然に満たされる。
+//   - 状態は enum エンティティ Status で表す。文字列ではないため、
+//     綴り違いの状態をポリシーに書けば validator が弾く。
+//   - 決裁 3 種（approve / reject / return）はアクショングループ decide にまとめ、
+//     ポリシーでは action in Action::"decide" と書く。
+
+namespace Approval {
+
+  @doc("部署 (spec.md §1)。所属チーム（members / managers）を属性として指す。")
+  entity Department = {
+    // その部署に所属する全ユーザーを含むチーム（上長も含む）
+    members: Team,
+    // その部署の上長だけを含むチーム。必ず members の子（in）である
+    managers: Team,
+  };
+
+  @doc("所属と役職を表すグループ。Department の直下、または同じ部署の別チームの下に置く。")
+  entity Team in [Department, Team] = {
+    department: Department,
+  };
+
+  @doc("ユーザー (spec.md §1)。兼務は複数の Team を親に持つことで表す。")
+  entity User in [Team];
+
+  @doc("稟議の状態 (spec.md §2)。列挙エンティティなので取り得る値が閉じている。")
+  entity Status enum ["Draft", "Pending", "Returned", "Approved", "Rejected"];
+
+  @doc("稟議申請 (spec.md §1)。申請先部署を親にも持たせ、resource in Department::… で選べるようにする。")
+  entity Request in [Department] = {
+    author: User,
+    department: Department,
+    status: Status,
+  };
+
+  // ---------------------------------------------------------------------------
+  // アクション (spec.md §3, §4)
+  // ---------------------------------------------------------------------------
+
+  @doc("A. 申請の作成。申請はまだ存在しないので、申請先の Department を resource とする。")
+  action create appliesTo {
+    principal: [User],
+    resource: [Department],
+  };
+
+  @doc("閲覧 (R1/R2)、編集 (U1〜U3 / B)、提出・再提出 (C)。")
+  action read, edit, submit appliesTo {
+    principal: [User],
+    resource: [Request],
+  };
+
+  @doc("決裁のアクショングループ。Pending の申請に対して上長が下す判断。")
+  action decide;
+
+  @doc("D. 承認 / E. 却下 / F. 差し戻し。いずれも decide グループの一員。")
+  action approve, reject, return in [decide] appliesTo {
+    principal: [User],
+    resource: [Request],
+  };
+}
