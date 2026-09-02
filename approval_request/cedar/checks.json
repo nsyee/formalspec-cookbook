@@ -1,0 +1,73 @@
+{
+  "namespace": "Approval",
+  "schema": "approval.cedarschema",
+  "policies": "approval.cedar",
+  "entities": "entities.json",
+  "cases": "cases.json",
+  "properties": [
+    {
+      "name": "P1-only-target-managers-decide",
+      "kind": "allowed-only-if",
+      "property": "properties/P1-only-target-managers-decide.cedar",
+      "actions": ["approve", "reject", "return"],
+      "resource": "Request"
+    },
+    {
+      "name": "P2-terminal-requests-are-frozen",
+      "kind": "allowed-only-if",
+      "property": "properties/P2-terminal-requests-are-frozen.cedar",
+      "actions": ["edit", "submit", "approve", "reject", "return"],
+      "resource": "Request"
+    },
+    {
+      "name": "R2-only-affiliated-users",
+      "kind": "allowed-only-if",
+      "property": "properties/R2-only-affiliated-users.cedar",
+      "actions": ["read", "edit", "submit", "approve", "reject", "return"],
+      "resource": "Request"
+    },
+    {
+      "name": "U2-only-author-or-manager-edit",
+      "kind": "allowed-only-if",
+      "property": "properties/U2-only-author-or-manager-edit.cedar",
+      "actions": ["edit"],
+      "resource": "Request"
+    },
+    {
+      "name": "C-only-author-submits",
+      "kind": "allowed-only-if",
+      "property": "properties/C-only-author-submits.cedar",
+      "actions": ["submit"],
+      "resource": "Request"
+    },
+    {
+      "name": "A-only-own-department",
+      "kind": "allowed-only-if",
+      "property": "properties/A-only-own-department.cedar",
+      "actions": ["create"],
+      "resource": "Department"
+    },
+    {
+      "name": "R1-every-affiliated-user-can-read",
+      "kind": "allowed-whenever",
+      "property": "properties/R1-every-affiliated-user-can-read.cedar",
+      "actions": ["read"],
+      "resource": "Request"
+    },
+    {
+      "name": "D-self-approval-is-allowed",
+      "kind": "allowed-whenever",
+      "property": "properties/D-self-approval-is-allowed.cedar",
+      "actions": ["approve", "reject", "return"],
+      "resource": "Request"
+    },
+    {
+      "name": "D-self-approval-without-hierarchy-assumption",
+      "kind": "allowed-whenever",
+      "property": "properties/D-self-approval-without-hierarchy-assumption.cedar",
+      "actions": ["approve"],
+      "resource": "Request",
+      "expect": "violation"
+    }
+  ]
+}
