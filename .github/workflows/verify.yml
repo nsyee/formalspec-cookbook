@@ -82,3 +82,14 @@ jobs:
           path: .tools
           key: souther-${{ hashFiles('scripts/souther.py') }}
       - run: make verify-souther
+
+  lean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache elan and the pinned Lean toolchain
+        uses: actions/cache@v4
+        with:
+          path: .tools
+          key: lean-${{ runner.os }}-${{ hashFiles('scripts/lean.py', '**/lean-toolchain') }}
+      - run: make verify-lean
