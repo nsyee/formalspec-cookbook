@@ -55,3 +55,15 @@ jobs:
             ~/.quint
           key: quint-${{ hashFiles('scripts/quint.py') }}
       - run: make verify-quint
+
+  cedar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache the Cedar CLI and cvc5
+        uses: actions/cache@v4
+        with:
+          path: .tools
+          key: cedar-${{ runner.os }}-${{ hashFiles('scripts/cedar.py') }}
+      - run: make verify-cedar

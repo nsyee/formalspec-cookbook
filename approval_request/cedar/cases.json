@@ -1,0 +1,158 @@
+[
+  {
+    "name": "R1: alice (dev member) reads a dev request",
+    "principal": "User::\"alice\"", "action": "Action::\"read\"", "resource": "Request::\"dev/pending-by-alice\"",
+    "decision": "allow", "reason": ["R1-read-if-affiliated"]
+  },
+  {
+    "name": "R1: carol (dev manager) reads a dev request by someone else",
+    "principal": "User::\"carol\"", "action": "Action::\"read\"", "resource": "Request::\"dev/draft-by-dave\"",
+    "decision": "allow", "reason": ["R1-read-if-affiliated"]
+  },
+  {
+    "name": "R2: bob (sales only) cannot read a dev request",
+    "principal": "User::\"bob\"", "action": "Action::\"read\"", "resource": "Request::\"dev/pending-by-alice\"",
+    "decision": "deny", "reason": ["R2-outsiders-see-nothing"]
+  },
+  {
+    "name": "R2: carol (dev only) cannot approve a sales request",
+    "principal": "User::\"carol\"", "action": "Action::\"approve\"", "resource": "Request::\"sales/pending-by-bob\"",
+    "decision": "deny", "reason": ["R2-outsiders-see-nothing", "P1-decision-rights-follow-the-target-department"]
+  },
+
+  {
+    "name": "A: bob creates a request for sales, where he belongs",
+    "principal": "User::\"bob\"", "action": "Action::\"create\"", "resource": "Department::\"sales\"",
+    "decision": "allow", "reason": ["A-create-in-own-department"]
+  },
+  {
+    "name": "A: bob cannot create a request for dev",
+    "principal": "User::\"bob\"", "action": "Action::\"create\"", "resource": "Department::\"dev\"",
+    "decision": "deny"
+  },
+  {
+    "name": "A: alice creates a request for either of her departments",
+    "principal": "User::\"alice\"", "action": "Action::\"create\"", "resource": "Department::\"dev\"",
+    "decision": "allow", "reason": ["A-create-in-own-department"]
+  },
+
+  {
+    "name": "U1: the author edits a Draft",
+    "principal": "User::\"dave\"", "action": "Action::\"edit\"", "resource": "Request::\"dev/draft-by-dave\"",
+    "decision": "allow", "reason": ["U1-author-edits-and-submits-own-request"]
+  },
+  {
+    "name": "U1: the author edits a Returned request",
+    "principal": "User::\"alice\"", "action": "Action::\"edit\"", "resource": "Request::\"dev/returned-by-alice\"",
+    "decision": "allow", "reason": ["U1-author-edits-and-submits-own-request"]
+  },
+  {
+    "name": "U1: the author cannot edit while Pending",
+    "principal": "User::\"alice\"", "action": "Action::\"edit\"", "resource": "Request::\"dev/pending-by-alice\"",
+    "decision": "deny"
+  },
+  {
+    "name": "U2: alice (dev member, sales manager) cannot edit dave's dev Draft",
+    "principal": "User::\"alice\"", "action": "Action::\"edit\"", "resource": "Request::\"dev/draft-by-dave\"",
+    "decision": "deny"
+  },
+  {
+    "name": "U3: carol (dev manager) edits dave's Draft",
+    "principal": "User::\"carol\"", "action": "Action::\"edit\"", "resource": "Request::\"dev/draft-by-dave\"",
+    "decision": "allow", "reason": ["U3-manager-edits-before-decision"]
+  },
+  {
+    "name": "U3: carol (dev manager) edits a Pending request",
+    "principal": "User::\"carol\"", "action": "Action::\"edit\"", "resource": "Request::\"dev/pending-by-alice\"",
+    "decision": "allow", "reason": ["U3-manager-edits-before-decision"]
+  },
+
+  {
+    "name": "C: the author submits a Draft",
+    "principal": "User::\"dave\"", "action": "Action::\"submit\"", "resource": "Request::\"dev/draft-by-dave\"",
+    "decision": "allow", "reason": ["U1-author-edits-and-submits-own-request"]
+  },
+  {
+    "name": "C: the author resubmits a Returned request",
+    "principal": "User::\"alice\"", "action": "Action::\"submit\"", "resource": "Request::\"dev/returned-by-alice\"",
+    "decision": "allow", "reason": ["U1-author-edits-and-submits-own-request"]
+  },
+  {
+    "name": "C: a manager cannot submit on behalf of the author",
+    "principal": "User::\"carol\"", "action": "Action::\"submit\"", "resource": "Request::\"dev/draft-by-dave\"",
+    "decision": "deny"
+  },
+
+  {
+    "name": "D: alice (sales manager) approves bob's sales request",
+    "principal": "User::\"alice\"", "action": "Action::\"approve\"", "resource": "Request::\"sales/pending-by-bob\"",
+    "decision": "allow", "reason": ["D-managers-decide-pending-requests"]
+  },
+  {
+    "name": "E: alice (sales manager) rejects bob's sales request",
+    "principal": "User::\"alice\"", "action": "Action::\"reject\"", "resource": "Request::\"sales/pending-by-bob\"",
+    "decision": "allow", "reason": ["D-managers-decide-pending-requests"]
+  },
+  {
+    "name": "F: alice (sales manager) returns bob's sales request",
+    "principal": "User::\"alice\"", "action": "Action::\"return\"", "resource": "Request::\"sales/pending-by-bob\"",
+    "decision": "allow", "reason": ["D-managers-decide-pending-requests"]
+  },
+  {
+    "name": "D: self-approval is allowed for a manager of the target department",
+    "principal": "User::\"alice\"", "action": "Action::\"approve\"", "resource": "Request::\"sales/pending-by-alice\"",
+    "decision": "allow", "reason": ["D-managers-decide-pending-requests"]
+  },
+  {
+    "name": "D: a member cannot approve",
+    "principal": "User::\"bob\"", "action": "Action::\"approve\"", "resource": "Request::\"sales/pending-by-bob\"",
+    "decision": "deny", "reason": ["P1-decision-rights-follow-the-target-department"]
+  },
+  {
+    "name": "D: a Draft cannot be approved even by a manager",
+    "principal": "User::\"carol\"", "action": "Action::\"approve\"", "resource": "Request::\"dev/draft-by-dave\"",
+    "decision": "deny"
+  },
+
+  {
+    "name": "P1: alice (sales manager, dev member) cannot approve her own dev request",
+    "principal": "User::\"alice\"", "action": "Action::\"approve\"", "resource": "Request::\"dev/pending-by-alice\"",
+    "decision": "deny", "reason": ["P1-decision-rights-follow-the-target-department"]
+  },
+  {
+    "name": "P1: ... nor reject or return it",
+    "principal": "User::\"alice\"", "action": "Action::\"return\"", "resource": "Request::\"dev/pending-by-alice\"",
+    "decision": "deny", "reason": ["P1-decision-rights-follow-the-target-department"]
+  },
+  {
+    "name": "P1: carol (dev manager) is the one who can approve it",
+    "principal": "User::\"carol\"", "action": "Action::\"approve\"", "resource": "Request::\"dev/pending-by-alice\"",
+    "decision": "allow", "reason": ["D-managers-decide-pending-requests"]
+  },
+
+  {
+    "name": "P2: an Approved request cannot be approved again",
+    "principal": "User::\"alice\"", "action": "Action::\"approve\"", "resource": "Request::\"sales/approved-by-bob\"",
+    "decision": "deny", "reason": ["P2-terminal-requests-are-frozen"]
+  },
+  {
+    "name": "P2: an Approved request cannot be returned",
+    "principal": "User::\"alice\"", "action": "Action::\"return\"", "resource": "Request::\"sales/approved-by-bob\"",
+    "decision": "deny", "reason": ["P2-terminal-requests-are-frozen"]
+  },
+  {
+    "name": "P2: an Approved request cannot be edited by its manager",
+    "principal": "User::\"alice\"", "action": "Action::\"edit\"", "resource": "Request::\"sales/approved-by-bob\"",
+    "decision": "deny", "reason": ["P2-terminal-requests-are-frozen"]
+  },
+  {
+    "name": "P2: a Rejected request cannot be edited or resubmitted by its author",
+    "principal": "User::\"bob\"", "action": "Action::\"submit\"", "resource": "Request::\"sales/rejected-by-bob\"",
+    "decision": "deny", "reason": ["P2-terminal-requests-are-frozen"]
+  },
+  {
+    "name": "P2: a terminal request is still readable",
+    "principal": "User::\"bob\"", "action": "Action::\"read\"", "resource": "Request::\"sales/rejected-by-bob\"",
+    "decision": "allow", "reason": ["R1-read-if-affiliated"]
+  }
+]
