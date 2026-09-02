@@ -1,0 +1,248 @@
+// Compile-time checked examples for approval_request.
+//
+// Every row here is evaluated by `souther compile`; a row whose expectation
+// does not hold is a compile error, so these are the executable counterpart
+// of the Alloy assertions, the TLA+ invariants and the Cedar test fixtures in
+// the sibling directories. The fixtures live here rather than in the model
+// (`examples for` keeps them out of the published module).
+//
+// Cast (mirrors approval_request/spec.md):
+//   alice  member of sales                    -- the usual author
+//   bob    manager of sales, member of eng    -- decides on sales requests
+//   carol  manager of eng                     -- a manager, but of another department
+//   dave   member of eng                      -- not affiliated with sales at all
+//   e / x  the shortest identifiers the invariants admit (boundary fixtures)
+examples for approval_request
+
+let alice = UserId("alice")
+let bob = UserId("bob")
+let carol = UserId("carol")
+let dave = UserId("dave")
+
+let erin = UserId("e")
+
+let sales = DepartmentId("sales")
+let eng = DepartmentId("eng")
+let x = DepartmentId("x")
+
+let entries =
+    [
+        Affiliation { user = alice, department = sales, role = Member },
+        Affiliation { user = bob, department = sales, role = Manager },
+        Affiliation { user = bob, department = eng, role = Member },
+        Affiliation { user = carol, department = eng, role = Manager },
+        Affiliation { user = dave, department = eng, role = Member },
+        Affiliation { user = erin, department = x, role = Manager }
+    ]
+
+let org = Directory(entries)
+
+let laptop = Content { title = Title("Laptop"), amount = Amount(1500) }
+let desk = Content { title = Title("Desk"), amount = Amount(300) }
+let free = Content { title = Title("D"), amount = Amount(0) }
+
+let aliceDraft = Draft { author = alice, department = sales, content = laptop }
+let alicePending = Pending { author = alice, department = sales, content = laptop }
+let aliceReturned =
+    Returned { author = alice, department = sales, content = laptop, returnedBy = bob }
+let aliceApproved =
+    Approved { author = alice, department = sales, content = laptop, approvedBy = bob }
+let aliceRejected =
+    Rejected { author = alice, department = sales, content = laptop, rejectedBy = bob }
+
+// bob is both the author and a manager of the target department.
+let bobPending = Pending { author = bob, department = sales, content = desk }
+
+// === Directory: uniqueness and P3 (every department has a manager) ===
+example registerDirectory
+    | "a consistent directory is accepted"                 : (entries) -> Directory
+    | "one user cannot hold two roles in one department"
+        : (
+            [
+                Affiliation { user = alice, department = sales, role = Member },
+                Affiliation { user = alice, department = sales, role = Manager },
+                Affiliation { user = bob, department = sales, role = Manager }
+            ]
+        )
+        -> DuplicateAffiliation
+    | "the same user may hold a role in each of two departments"
+        : (
+            [
+                Affiliation { user = bob, department = sales, role = Manager },
+                Affiliation { user = bob, department = eng, role = Manager }
+            ]
+        )
+        -> Directory
+    | "a department with members but no manager is refused (P3)"
+        : ([Affiliation { user = alice, department = sales, role = Member }])
+        -> DepartmentWithoutManager
+    | "an empty directory has no department to violate P3" : ([])      -> Directory
+
+// === Create (A) ===
+example create
+    | "an affiliated member creates a Draft in their department"
+        : (org, alice, sales, "Laptop", 1500)
+        -> Draft { author = alice, department = sales, content = laptop }
+    | "a manager of the department may create too"     : (org, bob, sales, "Desk", 300)   -> Draft
+    | "a user with no affiliation to the department cannot create"
+        : (org, dave, sales, "Laptop", 1500)
+        -> NotAffiliated
+    | "a manager of another department cannot create here"
+        : (org, carol, sales, "Laptop", 1500)
+        -> NotAffiliated
+    | "the empty title is refused by Title's invariant"
+        : (org, alice, sales, "", 1500)
+        -> InvalidContent
+    | "a one-character title is the smallest accepted" : (org, alice, sales, "L", 1500)   -> Draft
+    | "a negative amount is refused by Amount's invariant"
+        : (org, alice, sales, "Laptop", -1)
+        -> InvalidContent
+    | "zero is the smallest accepted amount"           : (org, alice, sales, "Laptop", 0) -> Draft
+
+// === Read (R1, R2) ===
+example read
+    | "the author reads their own request"                 : (org, alice, aliceDraft)   -> Draft
+    | "any member of the target department reads it, whatever the state"
+        : (org, bob, aliceApproved)
+        -> Approved
+    | "a member of the department reads a Pending request" : (org, alice, alicePending) -> Pending
+    | "a member of the department reads a Rejected request"
+        : (org, alice, aliceRejected)
+        -> Rejected
+    | "a manager of another department cannot read it"     : (org, carol, alicePending) -> NotAffiliated
+    | "a member of another department cannot read it"      : (org, dave, aliceRejected) -> NotAffiliated
+    | "the request comes back unchanged"
+        : (org, alice, aliceReturned)
+        -> Returned { author = alice, department = sales, content = laptop, returnedBy = bob }
+
+// === Edit (U1, U2, U3) ===
+example edit
+    | "the author edits a Draft"
+        : (org, alice, aliceDraft, desk)
+        -> Draft { author = alice, department = sales, content = desk }
+    | "the author edits a Returned request and it stays Returned"
+        : (org, alice, aliceReturned, desk)
+        -> Returned { author = alice, department = sales, content = desk, returnedBy = bob }
+    | "the author cannot edit once it is Pending"     : (org, alice, alicePending, desk) -> NotManager
+    | "the target department's manager edits a Draft" : (org, bob, aliceDraft, desk)     -> Draft
+    | "the target department's manager edits a Pending request"
+        : (org, bob, alicePending, desk)
+        -> Pending { author = alice, department = sales, content = desk }
+    | "the target department's manager edits a Returned request"
+        : (org, bob, aliceReturned, desk)
+        -> Returned
+    | "another member of the department cannot edit a Draft"
+        : (org, dave, aliceDraft, desk)
+        -> NotAuthor
+    | "a manager of another department cannot edit a Pending request (P1)"
+        : (org, carol, alicePending, desk)
+        -> NotManager
+    | "a manager of another department cannot edit a Returned request (P1)"
+        : (org, carol, aliceReturned, desk)
+        -> NotAuthor
+
+// === Submit (C) ===
+example submit
+    | "the author submits a Draft"
+        : (alice, aliceDraft)
+        -> Pending { author = alice, department = sales, content = laptop }
+    | "the author resubmits a Returned request; returnedBy is dropped"
+        : (alice, aliceReturned)
+        -> Pending { author = alice, department = sales, content = laptop }
+    | "the department's manager cannot submit on the author's behalf"
+        : (bob, aliceDraft)
+        -> NotAuthor
+
+// === Approve / Reject / Return (D, E, F) ===
+example approve
+    | "the target department's manager approves"
+        : (org, bob, alicePending)
+        -> Approved { author = alice, department = sales, content = laptop, approvedBy = bob }
+    | "a manager of another department cannot approve (P1)"
+        : (org, carol, alicePending)
+        -> NotManager
+    | "the author, a mere member, cannot approve their own request"
+        : (org, alice, alicePending)
+        -> NotManager
+    | "self-approval: an author who manages the target department approves"
+        : (org, bob, bobPending)
+        -> Approved { author = bob, department = sales, content = desk, approvedBy = bob }
+
+example reject
+    | "the target department's manager rejects"
+        : (org, bob, alicePending)
+        -> Rejected { author = alice, department = sales, content = laptop, rejectedBy = bob }
+    | "a manager of another department cannot reject (P1)"
+        : (org, carol, alicePending)
+        -> NotManager
+
+example return
+    | "the target department's manager returns it for revision"
+        : (org, bob, alicePending)
+        -> Returned { author = alice, department = sales, content = laptop, returnedBy = bob }
+    | "a member cannot return it" : (org, dave, alicePending) -> NotManager
+
+// === Decide: every (state, command) cell ===
+// P2 (terminal immutability) is answered here: the typed behaviors cannot even
+// be applied to Approved / Rejected, and `decide` maps every command an
+// affiliated actor sends against a terminal request to TerminalRequest.
+example decide
+    | "an actor with no affiliation to the department is denied first"
+        : (org, dave, alicePending, ApproveCommand)
+        -> NotAffiliated
+    | "a one-person department: its manager self-approves a zero-amount request"
+        : (org, erin, Pending { author = erin, department = x, content = free }, ApproveCommand)
+        -> Approved { author = erin, department = x, content = free, approvedBy = erin }
+    | "terminal: even the manager cannot edit an Approved request"
+        : (org, bob, aliceApproved, EditCommand { content = desk })
+        -> TerminalRequest
+    | "terminal: an Approved request cannot be approved again"
+        : (org, bob, aliceApproved, ApproveCommand)
+        -> TerminalRequest
+    | "terminal: a Rejected request cannot be resubmitted"
+        : (org, alice, aliceRejected, SubmitCommand)
+        -> TerminalRequest
+    | "terminal: a Rejected request cannot be returned"
+        : (org, bob, aliceRejected, ReturnCommand)
+        -> TerminalRequest
+    | "terminal: a Rejected request cannot be rejected again"
+        : (org, bob, aliceRejected, RejectCommand)
+        -> TerminalRequest
+    | "Draft + Edit by author -> Draft"
+        : (org, alice, aliceDraft, EditCommand { content = desk })
+        -> Draft { author = alice, department = sales, content = desk }
+    | "Draft + Submit by author -> Pending" : (org, alice, aliceDraft, SubmitCommand)   -> Pending
+    | "Draft + Approve is out of order, even for the manager"
+        : (org, bob, aliceDraft, ApproveCommand)
+        -> WrongState
+    | "Draft + Reject is out of order"      : (org, bob, aliceDraft, RejectCommand)     -> WrongState
+    | "Draft + Return is out of order"      : (org, bob, aliceDraft, ReturnCommand)     -> WrongState
+    | "Returned + Edit by author -> Returned"
+        : (org, alice, aliceReturned, EditCommand { content = desk })
+        -> Returned
+    | "Returned + Submit by author -> Pending"
+        : (org, alice, aliceReturned, SubmitCommand)
+        -> Pending { author = alice, department = sales, content = laptop }
+    | "Returned + Submit by someone else -> NotAuthor"
+        : (org, bob, aliceReturned, SubmitCommand)
+        -> NotAuthor
+    | "Returned + Approve is out of order"  : (org, bob, aliceReturned, ApproveCommand) -> WrongState
+    | "Pending + Edit by manager -> Pending"
+        : (org, bob, alicePending, EditCommand { content = desk })
+        -> Pending
+    | "Pending + Submit is out of order"    : (org, alice, alicePending, SubmitCommand) -> WrongState
+    | "Pending + Approve by manager -> Approved"
+        : (org, bob, alicePending, ApproveCommand)
+        -> Approved
+    | "Pending + Approve by another department's manager: not even affiliated (P1)"
+        : (org, carol, alicePending, ApproveCommand)
+        -> NotAffiliated
+    | "Pending + Approve by the author, a plain member -> NotManager"
+        : (org, alice, alicePending, ApproveCommand)
+        -> NotManager
+    | "Pending + Reject by manager -> Rejected"
+        : (org, bob, alicePending, RejectCommand)
+        -> Rejected
+    | "Pending + Return by manager -> Returned"
+        : (org, bob, alicePending, ReturnCommand)
+        -> Returned
