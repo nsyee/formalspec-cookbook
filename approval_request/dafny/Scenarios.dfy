@@ -1,20 +1,19 @@
 include "Workflow.dfy"
 
-// Executable scenarios: the tables of spec.md, run by `dafny test`.
+// 実行可能なシナリオ: spec.md の表を、`dafny test` で実行する。
 //
-// The lemmas of Properties.dfy already hold for every value, so these tests
-// are not there to raise confidence in the rules. They serve the two purposes
-// a proof cannot: they show that the model *runs* (it is compiled to a real
-// program, and `expect` fails at run time if the model changes meaning), and
-// they pin the reading of the requirements to concrete users -- the sort of
-// row a reviewer can check against spec.md by eye.
+// Properties.dfy の補題はすでにすべての値について成り立つので、ここのテストは規則への
+// 確信度を上げるためのものではない。証明にはできない 2 つの役割を果たす: モデルが
+// *動く* ことを示すこと（実際のプログラムにコンパイルされ、モデルの意味が変われば
+// `expect` が実行時に失敗する）と、仕様の読みを具体的なユーザーで固定すること
+// ——レビュアーが spec.md と見比べで突き合わせられる種類の行である。
 module Scenarios {
   import opened Approval
   import opened Workflow
 
-  // alice: member of sales. bob: manager of sales.
-  // carol: manager of eng *and* member of sales -- the joint appointment that
-  // property P1 is about. dave: member of eng only.
+  // alice: sales の一般メンバー。bob: sales の上長。
+  // carol: eng の上長 *かつ* sales の一般メンバー——性質 P1 が対象とする兼務。
+  // dave: eng にしか所属していない。
   function DemoDirectory(): Directory {
     var assignment: Assignment :=
       map[("alice", "sales") := Member,
@@ -35,7 +34,7 @@ module Scenarios {
     Content("laptop", 1500)
   }
 
-  // Requirements A, C, F: Draft -> Pending -> Returned -> Pending -> Approved.
+  // アクション A, C, F: Draft → Pending → Returned → Pending → Approved。
   method {:test} RoundTripEndsApproved() {
     var system := new System(DemoDirectory());
 
@@ -54,15 +53,15 @@ module Scenarios {
 
     var approved := system.Execute("bob", id, ApproveCommand);
     expect approved.Success? && approved.value.status == Approved("bob");
-    // `history` is ghost, so it is asserted rather than expected: the trace
-    // is checked by the verifier and costs nothing at run time.
+    // `history` は ghost なので、expect ではなく assert する。トレースは検証器が検査し、
+    // 実行時のコストはゼロである。
     assert system.history ==
            [(id, "alice", SubmitCommand), (id, "bob", ReturnCommand),
             (id, "alice", SubmitCommand), (id, "bob", ApproveCommand)];
   }
 
-  // Requirement A: the author must be affiliated with the target department,
-  // and the content has to satisfy the invariants of its type.
+  // アクション A: 作成者は申請先部署に所属していなければならず、内容はその型の
+  // 不変条件を満たさなければならない。
   method {:test} CreateIsRefusedOutsideTheDepartment() {
     var system := new System(DemoDirectory());
 
@@ -79,8 +78,7 @@ module Scenarios {
     expect accepted.Success?;
   }
 
-  // Requirement D and its note: a manager of the target department may
-  // approve a request they wrote themselves.
+  // アクション D とその注: 申請先部署の上長は、自分が作成した申請を承認できる。
   method {:test} SelfApprovalIsAllowed() {
     var system := new System(DemoDirectory());
 
@@ -93,8 +91,8 @@ module Scenarios {
     expect decided.Success? && decided.value.status == Approved("bob");
   }
 
-  // Property P1: carol manages eng and is a plain member of sales, so her eng
-  // authority buys her nothing on a sales request -- not even on her own.
+  // 性質 P1: carol は eng の上長で sales では一般メンバーなので、eng での権限は sales 宛ての
+  // 申請に対して何の役にも立たない——自分が作成した申請でさえも。
   method {:test} JointAppointmentDoesNotLeakAuthority() {
     var system := new System(DemoDirectory());
 
@@ -111,12 +109,12 @@ module Scenarios {
     var returnByCarol := system.Execute("carol", id, ReturnCommand);
     expect returnByCarol == Failure(NotManager);
 
-    // The same commands from the manager of the target department succeed.
+    // 同じコマンドを申請先部署の上長が出せば成功する。
     var byBob := system.Execute("bob", id, ApproveCommand);
     expect byBob.Success? && byBob.value.status == Approved("bob");
   }
 
-  // Requirements U1, U2, U3.
+  // アクション U1, U2, U3。
   method {:test} EditFollowsTheAuthorityTable() {
     var system := new System(DemoDirectory());
     var created := system.Create("alice", "sales", "laptop", 1500);
@@ -124,16 +122,15 @@ module Scenarios {
     var id := created.value;
     var edit := EditCommand(Content("monitor", 300));
 
-    // U1: the author edits their own Draft.
+    // U1: 作成者が自分の Draft を編集する。
     var byAuthor := system.Execute("alice", id, edit);
     expect byAuthor.Success? && byAuthor.value.content == Content("monitor", 300);
 
-    // U2: another member of the same department cannot.
+    // U2: 同じ部署の別の一般メンバーにはできない。
     var byColleague := system.Execute("carol", id, edit);
     expect byColleague == Failure(NotAuthor);
 
-    // U3: the manager of the department can, and can still do so once the
-    // request is Pending, where the author no longer can.
+    // U3: その部署の上長にはでき、作成者にはもうできなくなる Pending の後でも引き続きできる。
     var byManager := system.Execute("bob", id, edit);
     expect byManager.Success?;
 
@@ -145,7 +142,7 @@ module Scenarios {
     expect managerOnPending.Success? && managerOnPending.value.status == Pending;
   }
 
-  // Property P2: once decided, every command is refused.
+  // 性質 P2: 一度決裁されたら、どのコマンドも拒否される。
   method {:test} TerminalRequestsAreFrozen() {
     var system := new System(DemoDirectory());
     var created := system.Create("alice", "sales", "laptop", 1500);
@@ -170,8 +167,8 @@ module Scenarios {
     expect system.requests[id] == rejected.value;
   }
 
-  // Requirements R1 and R2, from both sides: an eng-only user sees nothing of
-  // a sales request, and every sales affiliate sees it.
+  // アクション R1 と R2 を両方向から: eng にしか所属しないユーザーには sales 宛ての申請が
+  // 一切見えない一方で、sales に所属するユーザーには全員見える。
   method {:test} ReadingIsConfinedToAffiliations() {
     var system := new System(DemoDirectory());
     var created := system.Create("alice", "sales", "laptop", 1500);
@@ -189,8 +186,8 @@ module Scenarios {
     expect visibleToBob == {id};
   }
 
-  // A command against an identifier that does not exist is a denial like any
-  // other, not a crash: the model is total.
+  // 存在しない識別子へのコマンドも、クラッシュではなく他と同じ拒否になる: このモデルは
+  // 全域的である。
   method {:test} UnknownRequestIsDenied() {
     var system := new System(DemoDirectory());
     var outcome := system.Execute("alice", 42, SubmitCommand);

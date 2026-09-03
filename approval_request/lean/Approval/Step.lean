@@ -1,57 +1,55 @@
 import Approval.Permission
 
 /-!
-# Actions and the transition relation (spec §4)
+# アクションと遷移関係（仕様 §4）
 
-`Step dir actor a r r'` is an inductive predicate: a value of this type *is* a
-proof that `actor` may perform `a` on `r`, yielding `r'`. Each constructor
-carries exactly the preconditions of the corresponding spec item, so a theorem
-proved by `cases` on a `Step` is automatically re-checked for exhaustiveness
-whenever an action is added.
+`Step dir actor a r r'` は帰納的な述語である。この型の値がそのまま、「`actor` は
+`r` に対して `a` を実行でき、結果は `r'` になる」という証明になる。各コンストラクタは
+対応する仕様項目の事前条件をそのまま持つので、`Step` への `cases` で証明した定理は、
+アクションを追加したときに自動で網羅性を再検査される。
 
-The three manager decisions (D, E, F) share every precondition and differ only
-in the resulting status, so they are one constructor parameterised by
-`Decision`.
+上長の決裁 3 種（D, E, F）は事前条件がすべて共通で、遷移先の状態だけが違うので、
+`Decision` でパラメータ付けした 1 つのコンストラクタにまとめている。
 -/
 
 namespace Approval
 
 variable {U D : Type}
 
-/-- What a target-department manager may do with a `Pending` request. -/
+/-- 申請先部署の上長が `Pending` の申請に対してできること。 -/
 inductive Decision where
   | approve
   | reject
   | «return»
   deriving DecidableEq, Repr
 
-/-- The status a decision leads to (spec §2 diagram). -/
+/-- 各決裁が遷移先とする状態（仕様 §2 の図）。 -/
 def Decision.outcome : Decision → Status
   | .approve => .approved
   | .reject => .rejected
   | .«return» => .returned
 
-/-- Actions on an existing request. Creation (spec §4 A) is `Reachable.create`. -/
+/-- 既存の申請に対するアクション。作成（仕様 §4 A）は `Reachable.create` が担う。 -/
 inductive Action where
   | edit
   | submit
   | decide (d : Decision)
   deriving DecidableEq, Repr
 
-/-- Transition relation. -/
+/-- 遷移関係。 -/
 inductive Step (dir : Directory U D) (actor : U) : Action → Request U D → Request U D → Prop where
-  /-- B: editing changes the content, not the status. -/
+  /-- B: 編集は内容を変えるだけで、状態は変えない。 -/
   | edit {r} (h : dir.CanEdit actor r) :
       Step dir actor .edit r r
-  /-- C: only the author submits, from `Draft` or `Returned`. -/
+  /-- C: 提出できるのは作成者だけで、`Draft` または `Returned` から行う。 -/
   | submit {r} (hauthor : actor = r.author) (hs : r.status.Submittable) :
       Step dir actor .submit r { r with status := .pending }
-  /-- D / E / F: only a manager *of the target department* decides a `Pending` request. -/
+  /-- D / E / F: `Pending` の申請を決裁できるのは *申請先部署の* 上長だけ。 -/
   | decide {r} (d : Decision) (hmanager : dir.IsManager actor r.target) (hs : r.status = .pending) :
       Step dir actor (.decide d) r { r with status := d.outcome }
 
-/-- Requests that can exist in the system: created by an affiliated user (A),
-then evolved by valid steps only. -/
+/-- システム上に存在しうる申請。所属するユーザーによって作成され（A）、
+その後は正しい遷移によってのみ変化したもの。 -/
 inductive Reachable (dir : Directory U D) : Request U D → Prop where
   | create {u : U} {d : D} (h : dir.Affiliated u d) :
       Reachable dir { author := u, target := d }
@@ -59,13 +57,13 @@ inductive Reachable (dir : Directory U D) : Request U D → Prop where
       (hr : Reachable dir r) (hs : Step dir actor a r r') :
       Reachable dir r'
 
-/-! ## Executable semantics
+/-! ## 実行可能な意味
 
-`Action.apply` is a *function* that either performs the action or explains the
-refusal. `apply_ok_iff` proves it agrees exactly with `Step`, so the CLI runner
-and the proofs talk about the same workflow. -/
+`Action.apply` は、アクションを実行するか拒否の理由を返す *関数* である。
+`apply_ok_iff` がこれが `Step` と厳密に一致することを証明するので、CLI の実行器と
+証明は同じワークフローを語っている。 -/
 
-/-- Why an action was refused. -/
+/-- アクションが拒否された理由。 -/
 inductive Denial where
   | notAuthor
   | notManager
@@ -92,7 +90,7 @@ namespace Action
 
 variable {dir : Directory U D} {actor : U} {a : Action} {r r' : Request U D}
 
-/-- Soundness: whatever `apply` performs is a valid step. -/
+/-- 健全性: `apply` が実行したことはすべて正しい遷移である。 -/
 theorem apply_sound (h : a.apply dir actor r = .ok r') : Step dir actor a r r' := by
   cases a with
   | edit =>
@@ -115,18 +113,18 @@ theorem apply_sound (h : a.apply dir actor r = .ok r') : Step dir actor a r r' :
       · cases h
     · cases h
 
-/-- Completeness: every valid step is performed by `apply`. -/
+/-- 完全性: 正しい遷移はすべて `apply` が実行する。 -/
 theorem apply_complete (h : Step dir actor a r r') : a.apply dir actor r = .ok r' := by
   cases h with
   | edit hc => simp [apply, hc]
   | submit ha hs => simp [apply, ha, hs]
   | decide d hm hs => simp [apply, hm, hs]
 
-/-- `apply` is exactly the functional presentation of `Step`. -/
+/-- `apply` は `Step` を関数として表したものにほかならない。 -/
 theorem apply_ok_iff : a.apply dir actor r = .ok r' ↔ Step dir actor a r r' :=
   ⟨apply_sound, apply_complete⟩
 
-/-- A refusal means no valid step exists. -/
+/-- 拒否されたということは、正しい遷移が存在しないということ。 -/
 theorem apply_error {e : Denial} (h : a.apply dir actor r = .error e) :
     ¬ ∃ r', Step dir actor a r r' := by
   rintro ⟨r', hs⟩
@@ -135,7 +133,7 @@ theorem apply_error {e : Denial} (h : a.apply dir actor r = .error e) :
 
 end Action
 
-/-- The relation is deterministic: an action has at most one result. -/
+/-- 遷移関係は決定的: 1 つのアクションの結果は高々 1 つ。 -/
 theorem Step.unique {dir : Directory U D} {actor : U} {a : Action} {r r₁ r₂ : Request U D}
     (h₁ : Step dir actor a r r₁) (h₂ : Step dir actor a r r₂) : r₁ = r₂ := by
   have := Action.apply_complete h₁
@@ -143,7 +141,7 @@ theorem Step.unique {dir : Directory U D} {actor : U} {a : Action} {r r₁ r₂ 
   cases this
   rfl
 
-/-- Whether a step exists is decidable, via the executable semantics. -/
+/-- 遷移が存在するかどうかは、実行可能な意味を通して決定可能である。 -/
 instance [DecidableEq D] {dir : Directory U D} {actor : U} {a : Action} {r r' : Request U D} :
     Decidable (Step dir actor a r r') :=
   match h : a.apply dir actor r with

@@ -1,20 +1,20 @@
 /-!
-# Approval request workflow — entities (spec §1, §2)
+# 稟議申請ワークフロー — 構成要素（仕様 §1, §2）
 
-Users and departments are left abstract (`U`, `D`); the model only needs
-decidable equality on them. Roles are attached to the *pair* (user, department)
-through a `Directory`, never to the user alone (spec §6).
+ユーザーと部署は抽象的な型（`U`, `D`）のままにしておく。モデルが必要とするのは
+それらの上の決定可能な等価性だけである。役職は `Directory` を通して
+(ユーザー, 部署) の *組* に対して与え、ユーザー単体には与えない（仕様 §6）。
 -/
 
 namespace Approval
 
-/-- Position of a user *in one department* (spec §1, Affiliation). -/
+/-- *ある部署での* ユーザーの役職（仕様 §1 「所属と役職」）。 -/
 inductive Role where
   | member
   | manager
   deriving DecidableEq, Repr
 
-/-- Lifecycle state of a request (spec §2). -/
+/-- 稟議申請の状態（仕様 §2）。 -/
 inductive Status where
   | draft
   | pending
@@ -25,10 +25,10 @@ inductive Status where
 
 namespace Status
 
-/-- Terminal states: no action may leave them (spec §2, P2). -/
+/-- 終端状態。どのアクションでもここからは出られない（仕様 §2, P2）。 -/
 abbrev IsTerminal (s : Status) : Prop := s = approved ∨ s = rejected
 
-/-- States from which the author may (re)submit (spec §4 C). -/
+/-- 作成者が提出（再提出）できる状態（仕様 §4 C）。 -/
 abbrev Submittable (s : Status) : Prop := s = draft ∨ s = returned
 
 theorem Submittable.not_terminal {s : Status} (h : s.Submittable) : ¬ s.IsTerminal := by
@@ -38,14 +38,15 @@ theorem pending_not_terminal : ¬ pending.IsTerminal := by simp
 
 end Status
 
-/-- A request. `author` and `target` are fixed at creation; only `status` evolves. -/
+/-- 稟議申請。`author`（作成者）と `target`（申請先部署）は作成時に定まり、
+変化するのは `status` だけ。 -/
 structure Request (U D : Type) where
   author : U
   target : D
   status : Status := .draft
   deriving DecidableEq, Repr
 
-/-- Who holds which role where: `role u d = none` means `u` does not belong to `d`. -/
+/-- 誰がどこでどの役職を持つか。`role u d = none` は `u` が `d` に所属していないこと。 -/
 structure Directory (U D : Type) where
   role : U → D → Option Role
 
@@ -53,10 +54,10 @@ namespace Directory
 
 variable {U D : Type} (dir : Directory U D)
 
-/-- `u` belongs to `d` with some role (spec §1). -/
+/-- `u` が何らかの役職で `d` に所属している（仕様 §1）。 -/
 abbrev Affiliated (u : U) (d : D) : Prop := dir.role u d ≠ none
 
-/-- `u` is a manager *of `d`* — the only notion of authority in this model. -/
+/-- `u` が *`d` の* 上長である — このモデルにおける権限の唯一の根拠。 -/
 abbrev IsManager (u : U) (d : D) : Prop := dir.role u d = some .manager
 
 abbrev IsMember (u : U) (d : D) : Prop := dir.role u d = some .member
@@ -69,7 +70,7 @@ theorem IsManager.affiliated {u : U} {d : D} (h : dir.IsManager u d) : dir.Affil
 theorem IsMember.not_manager {u : U} {d : D} (h : dir.IsMember u d) : ¬ dir.IsManager u d := by
   simp [h]
 
-/-- Structural invariant of a directory: every department has a manager (spec §1). -/
+/-- ディレクトリの構造上の不変条件: 各部署には上長が 1 名以上存在する（仕様 §1）。 -/
 structure WF (dir : Directory U D) : Prop where
   managerExists : ∀ d : D, ∃ u : U, dir.IsManager u d
 

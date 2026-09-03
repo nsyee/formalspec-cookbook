@@ -1,19 +1,18 @@
 import Approval.Step
 
 /-!
-# Scenarios: executable traces with expected outcomes
+# シナリオ: 期待する結果を伴った実行可能なトレース
 
-A `Scenario` is a request plus a script of `(actor, action, expectation)`. It is
-run with `Action.apply`, whose agreement with `Step` is proved in
-`Approval.Step`, so a scenario that checks at compile time (`#guard`) is a
-genuine fact about the relation.
+`Scenario` は、申請 1 件と `(実行者, アクション, 期待)` の台本からなる。実行には
+`Action.apply` を使い、それが `Step` と一致することは `Approval.Step` で証明済みなので、
+コンパイル時に検査される（`#guard`）シナリオは遷移関係についての真の事実である。
 -/
 
 namespace Approval
 
 variable {U D : Type}
 
-/-- What a scripted step should produce. -/
+/-- 台本の 1 行が生むべき結果。 -/
 inductive Expect where
   | ok (status : Status)
   | denied (why : Denial)
@@ -26,7 +25,7 @@ structure Scenario (U D : Type) where
   initial : Request U D
   script : List (U × Action × Expect)
 
-/-- One executed line of a scenario. -/
+/-- シナリオの、実行された 1 行。 -/
 structure Outcome (U D : Type) where
   actor : U
   action : Action
@@ -48,7 +47,7 @@ namespace Scenario
 
 variable [DecidableEq U] [DecidableEq D]
 
-/-- Run the script; a denied step leaves the request unchanged. -/
+/-- 台本を実行する。拒否された行は申請を変えない。 -/
 def run (s : Scenario U D) : List (Outcome U D) :=
   go s.initial s.script
 where
@@ -61,13 +60,13 @@ where
         | .error _ => r
       { actor, action := a, expected := e, result := res, before := r } :: go next rest
 
-/-- Every line met its expectation. -/
+/-- すべての行が期待を満たしたか。 -/
 def passes (s : Scenario U D) : Bool :=
   s.run.all Outcome.met
 
 end Scenario
 
-/-! ## Pretty printing for the CLI -/
+/-! ## CLI 向けの整形出力 -/
 
 def Status.show : Status → String
   | .draft => "Draft"

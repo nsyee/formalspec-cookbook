@@ -1,39 +1,38 @@
-// Approval Request workflow in Souther.
+// 稟議申請システム（兼務を前提としたワークフローと権限モデル）の Souther モデル。
 //
-// What Souther adds over the other models in this repository is that the
-// specification is *executable*: every `example` row below is checked by the
-// compiler, and every behavior can be run from the CLI with JSON input.
+// 自然言語での仕様は ../spec.md を参照。
 //
-// Modeling decisions (README.md in this directory compares them with the
-// other models):
-//   - Status is a sum of product data, one case per state. Each state carries
-//     only the fields that exist in that state (an approver only exists once
-//     the request is Approved), so an illegal combination is not writable.
-//   - A behavior's input type *is* its precondition on state. `approve` takes
-//     a `Pending`, not a `Request`, so approving a Draft or a terminal request
-//     is a compile error rather than a runtime denial (property P2).
-//   - Contextual roles `(User, Department) -> Role` are a `Directory` value,
-//     passed as input data (a set invariant is input, not a hidden dependency).
-//     Its invariants encode "one role per affiliation" and P3 ("every
-//     department has a manager").
-//   - Denials are ordinary sum cases (`NotAffiliated`, `NotAuthor`,
-//     `NotManager`), not exceptions. Callers `match` on them.
-//   - `decide` is the single entry point for the CLI: it accepts any
-//     `Request` and any `Command` and maps the pair to a transition or a
-//     denial, so `TerminalRequest` and `WrongState` are the only places a
-//     state/command mismatch is answered at run time.
+// このリポジトリの他のモデルに対する Souther の特徴は、仕様が *実行可能* である
+// こと。下記の `example` の各行はコンパイラが検査し、各 behavior は JSON 入力を
+// 与えて CLI から実行できる。
+//
+// モデル化の方針（他のモデルとの比較はこのディレクトリの README.md を参照）:
+//   - 状態は直和型で表し、状態ごとに 1 つのケースを置く。各ケースはその状態に
+//     存在するフィールドだけを持つ（承認者は申請が Approved になって初めて
+//     現れる）ので、ありえない組み合わせはそもそも書けない。
+//   - behavior の入力型が、そのまま状態に対する事前条件になる。`approve` は
+//     `Request` ではなく `Pending` を受け取るため、Draft や終端状態の申請を
+//     承認しようとすると、実行時の拒否ではなくコンパイルエラーになる（性質 P2）。
+//   - (ユーザー, 部署) -> 役職 は `Directory` の値として表し、入力データとして
+//     渡す（集合の不変条件は隠れた依存ではなく入力である）。その不変条件が
+//     「1 つの所属につき役職は 1 つ」と P3（各部署に上長が 1 名以上）を表す。
+//   - 拒否は例外ではなく通常の直和のケース（`NotAffiliated` / `NotAuthor` /
+//     `NotManager`）であり、呼び出し側は `match` で受ける。
+//   - `decide` は CLI 用の単一の入口。任意の `Request` と任意の `Command` を
+//     受け取り、その組を遷移か拒否に写す。状態とコマンドの不整合を実行時に
+//     答えるのは `TerminalRequest` と `WrongState` のこの場所だけ。
 module approval_request
 
-// === Identifiers ===
+// === 識別子 ===
 data UserId = String
     invariant nonEmpty = String.length(value) > 0
 
 data DepartmentId = String
     invariant nonEmpty = String.length(value) > 0
 
-// === Contextual roles: (User, Department) -> Role ===
-// A user may belong to several departments with a different role in each.
-// Manager is a role *within* one department, never a global attribute.
+// === (ユーザー, 部署) -> 役職 ===
+// ユーザーは複数の部署に所属でき（兼務）、部署ごとに役職が異なりうる。
+// 上長はある部署の *中での* 役職であり、ユーザー単体の属性ではない。
 data Role = Member | Manager
 
 data Affiliation =
@@ -47,8 +46,8 @@ let affiliationKey (a: Affiliation): String = a.user.value ++ "@" ++ a.departmen
 let hasManager (department: DepartmentId, entries: List<Affiliation>): Bool =
     List.any(a -> a.department == department && a.role == Manager, entries)
 
-// The whole role assignment of the organisation. Uniqueness and P3 are
-// properties of the set, so they live on the set's invariant.
+// 組織全体の役職の割り当て。一意性と P3 は集合そのものの性質なので、
+// 集合の不変条件として置く。
 data Directory = List<Affiliation>
     invariant oneRolePerAffiliation = List.allDistinctBy(affiliationKey, value)
     invariant everyDepartmentHasManager = List.all(a -> hasManager(a.department, value), value)
@@ -66,7 +65,7 @@ let isManagerOf (directory: Directory, user: UserId, department: DepartmentId): 
         | Some a -> a.role == Manager
         | None -> false
 
-// === Request content ===
+// === 申請の内容 ===
 data Title = String
     invariant nonEmpty = String.length(value) > 0
 
@@ -78,10 +77,9 @@ data Content =
     , amount: Amount
     }
 
-// === Request states ===
-// Fields shared by every state. The author and the target department never
-// change once the request exists, and who acted on it is recorded only in
-// the state where that act happened.
+// === 稟議申請の状態 ===
+// すべての状態が共通に持つフィールド。作成者と申請先部署は申請が存在する限り
+// 変わらず、誰が操作したかはその操作が起きた状態にだけ記録される。
 data RequestCore =
     { author: UserId
     , department: DepartmentId
@@ -109,13 +107,13 @@ data Rejected =
 
 data Request = Draft | Pending | Returned | Approved | Rejected
 
-// Input aliases: which states an action may start from. A behavior typed
-// on one of these refuses the other states at compile time; Approved and
-// Rejected appear in none of them (P2).
+// 入力の別名: そのアクションを開始できる状態の集合。これらを入力型に持つ
+// behavior は、他の状態をコンパイル時に拒否する。Approved と Rejected は
+// どの別名にも現れない（P2）。
 data Editable = Draft | Pending | Returned
 data Submittable = Draft | Returned
 
-// === Denials ===
+// === 拒否 ===
 data NotAffiliated
 data NotAuthor
 data NotManager
@@ -124,10 +122,10 @@ data WrongState
 
 data Denied = NotAffiliated | NotAuthor | NotManager | TerminalRequest | WrongState
 
-// === Directory registration ===
-// The only way to obtain a Directory is to attempt its construction. Each
-// invariant clause departs to its own case, so the caller learns which rule
-// broke without the rule being restated here.
+// === ディレクトリの登録 ===
+// Directory を得る唯一の方法は、その構築を試みること。不変条件の各項がそれぞれ
+// 別のケースに分岐するので、規則をここで再掲しなくても、呼び出し側はどの規則を
+// 破ったのかを知ることができる。
 behavior registerDirectory : (
     entries: List<Affiliation>
 ) -> Directory | DuplicateAffiliation | DepartmentWithoutManager
@@ -140,9 +138,9 @@ let registerDirectory (entries) = {
     directory
 }
 
-// === Create (requirement A) ===
-// Any affiliated user of the target department may create a Draft there.
-// Amount and Title are attempted, so invalid content is a case, not an abort.
+// === 申請の作成（§4 A）===
+// 申請先部署に所属するユーザーは、その部署宛ての Draft を作成できる。
+// Amount と Title は構築を試みるので、不正な内容は異常終了ではなくケースになる。
 behavior create : (
     directory: Directory,
     author: UserId,
@@ -160,9 +158,9 @@ let create (directory, author, department, title, amount) = {
     Draft { author = author, department = department, content = Content { title = t, amount = a } }
 }
 
-// === Read (requirements R1, R2) ===
-// Reading is a predicate, not a transition: the request comes back unchanged
-// or the reader is denied. Nothing is constructed.
+// === 閲覧（§3 R1, R2）===
+// 閲覧は遷移ではなく述語であり、申請がそのまま返るか、閲覧者が拒否されるかの
+// どちらかになる。何も構築しない。
 behavior read : (directory: Directory, reader: UserId, request: Request) -> Request | NotAffiliated
 
 let read (directory, reader, request) = {
@@ -170,10 +168,10 @@ let read (directory, reader, request) = {
     request
 }
 
-// === Edit (requirements U1, U2, U3) ===
-// The author may edit a Draft or a Returned request; the target department's
-// manager may additionally edit a Pending one. The state is preserved: the
-// `match` rebuilds the same case with new content.
+// === 申請の編集（§3 U1, U2, U3）===
+// 作成者は Draft と Returned の申請を編集できる。申請先部署の上長はさらに
+// Pending の申請も編集できる。状態は保たれる: `match` が同じケースを新しい
+// 内容で組み直す。
 let canEdit (directory: Directory, editor: UserId, request: Editable): Bool =
     match request with
         | Draft -> editor == request.author || isManagerOf(directory, editor, request.department)
@@ -201,9 +199,9 @@ let edit (directory, editor, request, content) = {
         | Returned as r -> Returned { ...r, content }
 }
 
-// === Submit (requirement C) ===
-// Only the author submits, from Draft or Returned. Resubmission drops the
-// `returnedBy` field because Pending does not declare it.
+// === 申請の提出 / 再提出（§4 C）===
+// 提出できるのは作成者だけで、Draft または Returned から行う。Pending は
+// `returnedBy` を宣言していないため、再提出でこのフィールドは落ちる。
 behavior submit : (actor: UserId, request: Submittable) -> Pending | NotAuthor
     constructs Pending
     ensures Pending -> value.author == request.author
@@ -213,11 +211,10 @@ let submit (actor, request) = {
     Pending { ...request }
 }
 
-// === Approve / Reject / Return (requirements D, E, F) ===
-// Only a manager *of the target department* decides. Self-approval is
-// allowed: the rule is about the actor's role in the target department, not
-// about whether the actor is the author. A manager of another department is
-// NotManager here even if the author reports to them elsewhere (P1).
+// === 承認 / 却下 / 差し戻し（§4 D, E, F）===
+// 決裁できるのは *申請先部署の* 上長だけ。自己決裁は許可される: 規則が問うのは
+// 申請先部署での実行者の役職であり、実行者が作成者本人かどうかではない。他部署
+// の上長は、別の部署で作成者の上長であっても、ここでは NotManager になる（P1）。
 behavior approve : (directory: Directory, actor: UserId, request: Pending) -> Approved | NotManager
     constructs Approved
     ensures Approved -> value.approvedBy == actor && value.author == request.author
@@ -245,12 +242,12 @@ let return (directory, actor, request) = {
     Returned { ...request, returnedBy = actor }
 }
 
-// === Decide: the dynamic entry point ===
-// The typed behaviors above make illegal transitions unwritable. The outside
-// world, however, sends an arbitrary command against an arbitrary request, so
-// `decide` narrows the pair and delegates. Every (state, command) cell is
-// answered; the compiler refuses a missing one. An actor who could not even
-// read the request learns nothing about its state: NotAffiliated comes first.
+// === decide: 動的な入口 ===
+// 上の型付き behavior は、ありえない遷移を書けないようにする。しかし外の世界は
+// 任意の申請に対して任意のコマンドを送ってくるので、`decide` がその組を絞り込ん
+// で各 behavior に委譲する。(状態, コマンド) のすべての組に答えており、欠けが
+// あればコンパイラが弾く。その申請を閲覧すらできない実行者に状態を漏らさない
+// よう、NotAffiliated を最初に判定する。
 data EditCommand =
     { content: Content
     }

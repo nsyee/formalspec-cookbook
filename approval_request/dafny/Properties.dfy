@@ -1,26 +1,24 @@
 include "Approval.dfy"
 
-// The properties of spec.md, proved for *every* directory, request and trace.
+// spec.md の性質を、*あらゆる* ディレクトリ・稟議申請・実行トレースについて証明する。
 //
-// The model checkers in this repository answer the same questions inside a
-// finite scope ("up to 3 users, 2 departments, 8 steps"). Here each statement
-// is a lemma quantified over all values of the types, so the guarantee has no
-// scope: `TerminalRequestsAreFrozen` holds for traces of any length, over
-// organisations of any size.
+// このリポジトリのモデル検査器は同じ問いに有限なスコープの中で答える（「ユーザー 3 人、
+// 部署 2 つ、遷移 8 回まで」）。ここでは各命題が型のすべての値について量化された
+// 補題なので、保証にスコープがない: `TerminalRequestsAreFrozen` は、任意の大きさの組織の
+// 上で、任意の長さのトレースに対して成り立つ。
 //
-// A lemma that a reader might expect to see -- "a Draft cannot be approved" --
-// is missing on purpose: `Approve` requires `CanDecide`, so such a call does
-// not verify and there is nothing to prove about it. Only the dynamic entry
-// point `Step` needs theorems.
+// 読者があると思うかもしれない補題——「Draft は承認できない」——は意図的に置いていない。
+// `Approve` は `CanDecide` を要求するので、そのような呼び出しはそもそも検証を通らず、
+// 証明すべきことがない。定理を必要とするのは動的な入口 `Step` だけである。
 module Properties {
   import opened Approval
 
-  // === Traces ===
+  // === 実行トレース ===
 
   datatype Event = Event(actor: UserId, command: Command)
 
-  // Applying a whole trace: a denied command leaves the request untouched,
-  // which is what the environment sees when a user is refused.
+  // トレース全体を適用する。拒否されたコマンドは申請に触れない——ユーザーが拒否されたときに
+  // 外部が見るのはこの振る舞いである。
   function Run(dir: Directory, r: Request, events: seq<Event>): Request
     decreases |events|
   {
@@ -30,22 +28,21 @@ module Properties {
       Run(dir, if outcome.Success? then outcome.value else r, events[1..])
   }
 
-  // === P1: contextual authority does not leak between departments ===
+  // === P1: 文脈依存の権限は部署間で漏れない ===
 
-  // Every successful decision comes from a manager of the *target*
-  // department, whatever roles the actor holds elsewhere.
+  // 成功した決裁はすべて *申請先* 部署の上長によるものであり、実行者が他の部署で
+  // どんな役職を持っていても関係ない。
   lemma OnlyTargetManagersDecide(dir: Directory, actor: UserId, r: Request, cmd: Command)
     requires cmd.ApproveCommand? || cmd.RejectCommand? || cmd.ReturnCommand?
     requires Step(dir, actor, r, cmd).Success?
     ensures r.status.Pending? && IsManagerOf(dir, actor, r.department)
   {
-    // `Step` delegates to `Approve`/`Reject`/`Return`, all guarded by
-    // `CanDecide`, which is the conjunction above.
+    // `Step` は `Approve` / `Reject` / `Return` に委譲し、いずれも上の連言そのものである
+    // `CanDecide` で守られている。
   }
 
-  // The concrete shape of P1: a user who manages `elsewhere` and is a plain
-  // member of the target department is refused, even on a request they wrote
-  // themselves.
+  // P1 の具体的な形: `elsewhere` の上長でありながら申請先部署では一般メンバーでしかない
+  // ユーザーは、たとえ自分が作成した申請であっても拒否される。
   lemma NoAuthorityLeakAcrossDepartments(
     dir: Directory, actor: UserId, r: Request, elsewhere: DepartmentId, cmd: Command)
     requires cmd.ApproveCommand? || cmd.RejectCommand? || cmd.ReturnCommand?
@@ -61,9 +58,8 @@ module Properties {
     }
   }
 
-  // Self-approval (spec.md section 4.D) is the same rule seen from the other
-  // side, so it must remain possible. The lemma exhibits a witness, which
-  // also proves that P1 above is not vacuous.
+  // 自己決裁（spec.md §4 D）は同じ規則を反対側から見たものなので、可能のままでなければ
+  // ならない。この補題は証人を示すので、上の P1 が空虚でないことの証明にもなっている。
   lemma SelfApprovalIsAllowed()
     ensures exists dir: Directory, actor: UserId, r: Request ::
               r.author == actor && Step(dir, actor, r, ApproveCommand).Success?
@@ -77,7 +73,7 @@ module Properties {
     assert Step(dir, SomeUser, r, ApproveCommand).Success?;
   }
 
-  // === P2: terminal states are frozen ===
+  // === P2: 終端状態の不変性 ===
 
   lemma TerminalRequestsRejectEveryCommand(dir: Directory, actor: UserId, r: Request, cmd: Command)
     requires Terminal(r.status)
@@ -85,7 +81,7 @@ module Properties {
   {
   }
 
-  // ... and therefore no trace, of any length, moves a decided request.
+  // …したがって、どの長さのトレースも、決裁済みの申請を動かせない。
   lemma TerminalRequestsAreFrozen(dir: Directory, r: Request, events: seq<Event>)
     requires Terminal(r.status)
     ensures Run(dir, r, events) == r
@@ -97,11 +93,10 @@ module Properties {
     }
   }
 
-  // === P3: no orphan request ===
+  // === P3: 迷子申請の不在 ===
 
-  // Because `Directory` is a subset type, "every department has a manager" is
-  // available from the mere fact that `dir` has that type; the proof only has
-  // to name the manager the constraint promises.
+  // `Directory` は部分型なので、`dir` がその型を持つという事実だけから
+  // 「各部署に上長が 1 名以上」が使える。証明は、制約が約束する上長を名指しすればよい。
   lemma EveryPendingRequestHasADecider(dir: Directory, r: Request)
     requires WellFormed(dir, r) && r.status.Pending?
     ensures exists decider: UserId :: CanDecide(dir, decider, r)
@@ -113,9 +108,8 @@ module Properties {
     assert CanDecide(dir, decider, r);
   }
 
-  // The reachability counterpart, which the model checkers get from a
-  // liveness property under fairness: a pending request is one event away
-  // from a terminal state.
+  // 到達可能性側の命題。モデル検査器では進行仮定の下の活性として得られるもので、
+  // Pending の申請はイベント 1 つで終端状態に到達できる。
   lemma PendingRequestsCanBeDecided(dir: Directory, r: Request)
     requires WellFormed(dir, r) && r.status.Pending?
     ensures exists e: Event :: Terminal(Run(dir, r, [e]).status)
@@ -131,17 +125,17 @@ module Properties {
     assert Terminal(Run(dir, r, [e]).status);
   }
 
-  // === Access control (spec.md section 3) ===
+  // === アクセス制御（spec.md §3）===
 
-  // R1 and R2 together: readability is exactly affiliation with the target
-  // department. `<==>` states both directions in one lemma.
+  // R1 と R2 をまとめて: 閲覧可能であることは、申請先部署に所属していることに他ならない。
+  // `<==>` にすると両方向を 1 つの補題で述べられる。
   lemma ReadIsExactlyAffiliation(dir: Directory, actor: UserId, r: Request)
     ensures CanRead(dir, actor, r) <==> IsAffiliated(dir, actor, r.department)
   {
   }
 
-  // U2: a colleague of the same department who is not the author and not a
-  // manager there cannot edit, in any state.
+  // U2: 同じ部署の同僚でも、作成者本人でなくその部署の上長でもないなら、どの状態でも
+  // 編集できない。
   lemma OtherMembersCannotEdit(dir: Directory, actor: UserId, r: Request)
     requires actor != r.author
     requires !IsManagerOf(dir, actor, r.department)
@@ -150,8 +144,8 @@ module Properties {
   {
   }
 
-  // U1 and U3: editing is confined to the states listed in spec.md, and
-  // succeeds for the two roles listed there.
+  // U1 と U3: 編集は spec.md に列挙された状態に限られ、そこに列挙された 2 つの立場に対しては
+  // 実際に成功する。
   lemma EditFollowsTheStateTable(dir: Directory, actor: UserId, r: Request, content: Content)
     ensures CanEdit(dir, actor, r) ==> !Terminal(r.status)
     ensures actor == r.author && (r.status.Draft? || r.status.Returned?) ==> CanEdit(dir, actor, r)
@@ -160,7 +154,7 @@ module Properties {
   {
   }
 
-  // C: submission is the author's alone.
+  // C: 提出できるのは作成者だけである。
   lemma OnlyTheAuthorSubmits(dir: Directory, actor: UserId, r: Request)
     requires Step(dir, actor, r, SubmitCommand).Success?
     ensures actor == r.author && (r.status.Draft? || r.status.Returned?)
@@ -168,11 +162,10 @@ module Properties {
   {
   }
 
-  // === Invariants along a trace ===
+  // === トレースに沿った不変条件 ===
 
-  // The author and the target department are fixed at creation time. Proving
-  // it for `Run` rather than for `Step` is what makes it an invariant of the
-  // system instead of a property of one transition.
+  // 作成者と申請先部署は作成時に定まる。これを `Step` ではなく `Run` について証明することで、
+  // 1 つの遷移の性質ではなくシステムの不変条件になる。
   lemma IdentityIsImmutable(dir: Directory, r: Request, events: seq<Event>)
     ensures Run(dir, r, events).author == r.author
     ensures Run(dir, r, events).department == r.department
@@ -184,8 +177,8 @@ module Properties {
     }
   }
 
-  // Consequently a well-formed request stays well-formed: its author remains
-  // affiliated with its target department, so P3 keeps applying to it.
+  // したがって、整合した申請は整合したままである: 作成者は申請先部署に所属し続けるので、
+  // P3 もその申請に適用され続ける。
   lemma WellFormednessIsPreserved(dir: Directory, r: Request, events: seq<Event>)
     requires WellFormed(dir, r)
     ensures WellFormed(dir, Run(dir, r, events))
@@ -193,14 +186,14 @@ module Properties {
     IdentityIsImmutable(dir, r, events);
   }
 
-  // The state machine of spec.md section 2 has no other edges: a single step
-  // either keeps the status or follows one of the arrows in the diagram.
+  // spec.md §2 の状態機構には他の辺がない: 1 回の遷移は、状態を保つか、図の矢印の
+  // いずれかに従うかのどちらかである。
   lemma StatusFollowsTheStateMachine(dir: Directory, actor: UserId, r: Request, cmd: Command)
     requires Step(dir, actor, r, cmd).Success?
     ensures var next := Step(dir, actor, r, cmd).value.status;
-            || next == r.status // edit
-            || (r.status.Draft? && next.Pending?) // submit
-            || (r.status.Returned? && next.Pending?) // resubmit
+            || next == r.status // 編集
+            || (r.status.Draft? && next.Pending?) // 提出
+            || (r.status.Returned? && next.Pending?) // 再提出
             || (r.status.Pending? && (next.Approved? || next.Rejected? || next.Returned?))
   {
   }
