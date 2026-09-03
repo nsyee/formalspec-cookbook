@@ -12,8 +12,10 @@ LEAN := ./scripts/lean.py
 LEAN_DIRS := $(wildcard */lean)
 DAFNY := ./scripts/dafny.py
 DAFNY_DIRS := $(wildcard */dafny)
+LEMMASCRIPT := ./scripts/lemmascript.py
+LEMMASCRIPT_DIRS := $(wildcard */lemmascript)
 
-.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny commands models checks clean
+.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny verify-lemmascript commands models checks clean
 
 help:
 	@echo "make verify         # run every model checker in this repository"
@@ -24,9 +26,10 @@ help:
 	@echo "make verify-souther # run the Souther models ($(SOUTHER_DIRS))"
 	@echo "make verify-lean    # check the Lean 4 models and proofs ($(LEAN_DIRS))"
 	@echo "make verify-dafny   # run the Dafny models ($(DAFNY_DIRS))"
+	@echo "make verify-lemmascript # compile the LemmaScript models to Dafny and verify ($(LEMMASCRIPT_DIRS))"
 	@echo "make commands       # list the commands of every Alloy model"
 	@echo "make models         # list the TLC models"
-	@echo "make checks         # list the Quint, Cedar, Souther, Lean and Dafny checks"
+	@echo "make checks         # list the Quint, Cedar, Souther, Lean, Dafny and LemmaScript checks"
 	@echo "make clean          # remove downloaded tools"
 	@echo
 	@echo "single model: $(ALLOY) verify approval_request/alloy/approval.als"
@@ -49,8 +52,12 @@ help:
 	@echo "single Dafny check: $(DAFNY) verify approval_request/dafny --only verify"
 	@echo "Dafny verification error: $(DAFNY) trace approval_request/dafny --only negative-authority-leak"
 	@echo "Dafny model run: $(DAFNY) run approval_request/dafny 'alice create sales laptop 1500' 'alice submit 0'"
+	@echo "single LemmaScript check: $(LEMMASCRIPT) verify approval_request/lemmascript --only check"
+	@echo "LemmaScript verification error: $(LEMMASCRIPT) trace approval_request/lemmascript --only negative-authority-leak"
+	@echo "LemmaScript scenarios under Node.js: $(LEMMASCRIPT) run approval_request/lemmascript"
+	@echo "LemmaScript regen after editing the .ts: $(LEMMASCRIPT) lsc -- regen --backend=dafny approval_request/lemmascript/approval.ts"
 
-verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny
+verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny verify-lemmascript
 
 verify-alloy:
 	@set -e; for model in $(ALLOY_MODELS); do \
@@ -94,6 +101,12 @@ verify-dafny:
 		$(DAFNY) verify $$dir; \
 	done
 
+verify-lemmascript:
+	@set -e; for dir in $(LEMMASCRIPT_DIRS); do \
+		echo "== $$dir"; \
+		$(LEMMASCRIPT) verify $$dir; \
+	done
+
 commands:
 	@set -e; for model in $(ALLOY_MODELS); do \
 		echo "== $$model"; \
@@ -126,6 +139,10 @@ checks:
 	@set -e; for dir in $(DAFNY_DIRS); do \
 		echo "== $$dir"; \
 		$(DAFNY) checks $$dir; \
+	done
+	@set -e; for dir in $(LEMMASCRIPT_DIRS); do \
+		echo "== $$dir"; \
+		$(LEMMASCRIPT) checks $$dir; \
 	done
 
 clean:
