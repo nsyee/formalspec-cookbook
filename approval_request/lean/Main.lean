@@ -1,13 +1,13 @@
 import Approval
 
 /-!
-CLI: replay the scenarios of `Approval.Examples` as readable traces.
+CLI: `Approval.Examples` のシナリオを、読めるトレースとして再生する。
 
-    approval              run every scenario
-    approval NAME...      run the named scenarios
-    approval --list       list scenario names
+    approval              すべてのシナリオを実行
+    approval NAME...      名前を指定したシナリオを実行
+    approval --list       シナリオ名を一覧表示
 
-Exit status is 1 if any line did not meet its expectation.
+期待を満たさない行が 1 つでもあれば、終了ステータスは 1 になる。
 -/
 
 open Approval Approval.Examples

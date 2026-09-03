@@ -1,49 +1,48 @@
 import Approval.Step
 
 /-!
-# Verified properties (spec §5 and the invariants behind them)
+# 検証した性質（仕様 §5 と、その背後にある不変条件）
 
-Every statement here is a theorem about *all* directories, users, departments
-and requests — no bound on the number of users or departments is involved. A
-proof by `cases` on a `Step` enumerates the actions, so adding an action to
-`Step` without revisiting a property here is a compile error.
+ここの命題はすべて、*あらゆる* ディレクトリ・ユーザー・部署・申請についての定理であり、
+ユーザー数や部署数の上限は一切使わない。`Step` への `cases` による証明はアクションを
+列挙するので、`Step` にアクションを追加してここの性質を見直さなければコンパイルエラーになる。
 -/
 
 namespace Approval
 
 variable {U D : Type} {dir : Directory U D} {actor : U} {a : Action} {r r' : Request U D}
 
-/-! ## What a step can and cannot change -/
+/-! ## 遷移が変えられるものと変えられないもの -/
 
-/-- Steps never touch the author or the target department (spec §1). -/
+/-- 遷移は作成者と申請先部署には一切触れない（仕様 §1）。 -/
 theorem Step.author_eq (h : Step dir actor a r r') : r'.author = r.author := by
   cases h <;> rfl
 
 theorem Step.target_eq (h : Step dir actor a r r') : r'.target = r.target := by
   cases h <;> rfl
 
-/-- A step may only start from a non-terminal request. -/
+/-- 遷移を開始できるのは、終端状態でない申請からだけ。 -/
 theorem Step.not_terminal (h : Step dir actor a r r') : ¬ r.status.IsTerminal := by
   cases h with
   | edit hc => exact hc.not_terminal
   | submit _ hs => exact hs.not_terminal
   | decide _ _ hs => rw [hs]; exact Status.pending_not_terminal
 
-/-! ## P2 — terminal states are immutable -/
+/-! ## P2 — 終端状態の不変性 -/
 
-/-- No action applies to an `Approved` or `Rejected` request at all. -/
+/-- `Approved` または `Rejected` の申請には、どのアクションも適用できない。 -/
 theorem P2_terminal_stuck (hterm : r.status.IsTerminal) : ¬ Step dir actor a r r' :=
   fun h => h.not_terminal hterm
 
-/-- Phrased as in the spec: a terminal request never changes its status. -/
+/-- 仕様の言い方に合わせた形: 終端状態の申請の状態は決して変わらない。 -/
 theorem P2_terminal_status_fixed (hterm : r.status.IsTerminal) (h : Step dir actor a r r') :
     r'.status = r.status :=
   absurd h (P2_terminal_stuck hterm)
 
-/-! ## P1 — authority is judged in the target department only -/
+/-! ## P1 — 権限は申請先部署での役職のみで判定する -/
 
-/-- Reaching `Approved` from anywhere else is possible only for a manager of the
-*target* department (the attachment's `only_manager_can_approve`). -/
+/-- 他の状態から `Approved` に到達させられるのは、*申請先* 部署の上長だけである
+（他モデルの `only_manager_can_approve` に相当）。 -/
 theorem approved_by_target_manager (h : Step dir actor a r r')
     (hbefore : r.status ≠ .approved) (hafter : r'.status = .approved) :
     dir.IsManager actor r.target := by
@@ -52,45 +51,45 @@ theorem approved_by_target_manager (h : Step dir actor a r r')
   | submit => cases hafter
   | decide d hm _ => exact hm
 
-/-- Every decision (approve / reject / return) is taken by a target manager. -/
+/-- 決裁（承認 / 却下 / 差し戻し）はすべて、申請先部署の上長が行っている。 -/
 theorem decision_by_target_manager {d : Decision} (h : Step dir actor (.decide d) r r') :
     dir.IsManager actor r.target := by
   cases h; assumption
 
-/-- P1 proper: a user who is a manager of `x` but only a member of the target
-department `y` cannot decide on a request to `y` — even their own. -/
+/-- P1 本体: 部署 `x` の上長でありながら申請先部署 `y` では一般メンバーでしかない
+ユーザーは、`y` 宛ての申請を——たとえ自分が作成したものでも——決裁できない。 -/
 theorem P1_no_authority_leak {x : D} {d : Decision}
     (_hx : dir.IsManager actor x) (hy : dir.IsMember actor r.target) :
     ¬ Step dir actor (.decide d) r r' :=
   fun h => hy.not_manager (decision_by_target_manager h)
 
-/-- Only a target manager can even *edit* somebody else's request (U2). -/
+/-- 他人の申請を *編集* することさえ、申請先部署の上長にしかできない（U2）。 -/
 theorem P1_no_edit_leak {x : D} (_hx : dir.IsManager actor x) (hy : dir.IsMember actor r.target)
     (hauthor : actor ≠ r.author) : ¬ Step dir actor .edit r r' := by
   intro h
   cases h with
   | edit hc => exact hy.not_canEdit hauthor hc
 
-/-- Self-approval is allowed (spec §4 D): being the author is no obstacle when
-the actor is a target manager. -/
+/-- 自己決裁は許可される（仕様 §4 D）。実行者が申請先部署の上長であれば、
+作成者本人であることは障害にならない。 -/
 theorem self_approval_allowed (hm : dir.IsManager r.author r.target) (hs : r.status = .pending) :
     Step dir r.author (.decide .approve) r { r with status := .approved } :=
   .decide .approve hm hs
 
-/-! ## Invariants of reachable requests -/
+/-! ## 到達可能な申請の不変条件 -/
 
-/-- The author of any request in the system belongs to its target department. -/
+/-- システム上のどの申請でも、作成者はその申請先部署に所属している。 -/
 theorem Reachable.author_affiliated (h : Reachable dir r) : dir.Affiliated r.author r.target := by
   induction h with
   | create haff => exact haff
   | step _ hs ih => rw [hs.author_eq, hs.target_eq]; exact ih
 
-/-- The author can always read their own request (R1 for the author). -/
+/-- 作成者は自分の申請を常に閲覧できる（作成者にとっての R1）。 -/
 theorem Reachable.author_canRead (h : Reachable dir r) : dir.CanRead r.author r :=
   h.author_affiliated
 
-/-- An `Approved` request was `Pending` and approved by a target manager;
-the approval changed nothing else. -/
+/-- `Approved` の申請は、`Pending` であったものを申請先部署の上長が承認したものであり、
+承認はそれ以外の何も変えていない。 -/
 theorem Reachable.approved_inversion (h : Reachable dir r) (hs : r.status = .approved) :
     ∃ (m : U) (r₀ : Request U D), Reachable dir r₀ ∧ r₀.status = .pending ∧
       dir.IsManager m r.target ∧ r = { r₀ with status := .approved } := by
@@ -106,21 +105,21 @@ theorem Reachable.approved_inversion (h : Reachable dir r) (hs : r.status = .app
       | reject => cases hs
       | «return» => cases hs
 
-/-! ## P3 — no orphaned request -/
+/-! ## P3 — 迷子申請の不在 -/
 
-/-- In a well-formed directory every request has a potential decider … -/
+/-- 正しいディレクトリの下では、どの申請にも決裁できるユーザーが存在し… -/
 theorem P3_manager_exists (hwf : dir.WF) (r : Request U D) : ∃ m, dir.IsManager m r.target :=
   hwf.managerExists r.target
 
-/-- … who can actually approve, reject or return it while it is `Pending`. -/
+/-- …そのユーザーは `Pending` の間、実際に承認・却下・差し戻しを行える。 -/
 theorem P3_pending_decidable (hwf : dir.WF) (hs : r.status = .pending) (d : Decision) :
     ∃ m, Step dir m (.decide d) r { r with status := d.outcome } :=
   let ⟨m, hm⟩ := hwf.managerExists r.target
   ⟨m, .decide d hm hs⟩
 
-/-- Conversely, only non-terminal requests can move: a request is stuck exactly
-when it is terminal (in a well-formed directory, from `Pending` a manager can
-always act, and from `Draft`/`Returned` the author can always submit). -/
+/-- 逆に、動けるのは終端状態でない申請だけである: 申請が行き止まるのは、それが終端状態である
+ときに限る（正しいディレクトリの下では、`Pending` からは上長が常に動け、
+`Draft` / `Returned` からは作成者が常に提出できる）。 -/
 theorem stuck_iff_terminal (hwf : dir.WF) :
     (¬ ∃ (u : U) (a : Action) (r' : Request U D), Step dir u a r r') ↔ r.status.IsTerminal := by
   constructor
