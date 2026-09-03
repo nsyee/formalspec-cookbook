@@ -27,7 +27,8 @@ codecs (a sum type is written as `{"type": "<Case>", ...fields}`, a newtype as
 its bare value), and the result is printed as JSON in the same encoding.
 
 Souther is a single self-executing jar that needs Java 25. The CLI is taken from
-`$SOUTHER_BIN`, then `$PATH`, and otherwise downloaded into `.tools/souther`.
+`$SOUTHER_BIN`, then from `$PATH` if that `souther` is the pinned version
+(`$SOUTHER_VERSION`, default 0.1.0), and otherwise downloaded into `.tools/souther`.
 Java is taken from `$JAVA_HOME`, then `$PATH`, if that `java` is 25 or later;
 otherwise a Temurin JDK 25 is downloaded into `.tools/jdk-25`.
 """
@@ -35,6 +36,7 @@ otherwise a Temurin JDK 25 is downloaded into `.tools/jdk-25`.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import platform
@@ -45,6 +47,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import zipfile
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -123,15 +126,50 @@ def java_bin() -> str:
     return str(local)
 
 
+def souther_version(binary: str) -> str:
+    """The `Implementation-Version` of the jar's manifest, or "" if it cannot be read."""
+    try:
+        with zipfile.ZipFile(binary) as jar, jar.open("META-INF/MANIFEST.MF") as manifest:
+            for line in manifest.read().decode("utf-8", "replace").splitlines():
+                key, _, value = line.partition(":")
+                if key.strip() == "Implementation-Version":
+                    return value.strip()
+    except (OSError, zipfile.BadZipFile, KeyError):
+        pass
+    return ""
+
+
+@functools.cache
 def souther_bin() -> str:
-    """The Souther CLI (a self-executing jar): from the environment, from $PATH, or downloaded."""
+    """The Souther CLI (a self-executing jar) of the pinned version.
+
+    `$SOUTHER_BIN` is used as given (with a warning if its version differs). A `souther` on
+    `$PATH` is used only if it is the pinned version; otherwise it is skipped, since the models
+    are written against that version's syntax. Anything else is downloaded into `.tools/souther`,
+    re-downloading if the cached jar is of a different version.
+    """
     if os.environ.get("SOUTHER_BIN"):
-        return os.environ["SOUTHER_BIN"]
+        explicit = os.environ["SOUTHER_BIN"]
+        found = souther_version(explicit)
+        if found != SOUTHER_VERSION:
+            print(
+                f"warning: SOUTHER_BIN={explicit} is souther {found or 'of unknown version'}, "
+                f"the models target {SOUTHER_VERSION}",
+                file=sys.stderr,
+            )
+        return explicit
     on_path = shutil.which("souther")
     if on_path:
-        return on_path
+        found = souther_version(on_path)
+        if found == SOUTHER_VERSION:
+            return on_path
+        print(
+            f"note: ignoring {on_path} (souther {found or 'of unknown version'}); "
+            f"the models target {SOUTHER_VERSION}",
+            file=sys.stderr,
+        )
     local = SOUTHER_PREFIX / "souther"
-    if not local.exists():
+    if not local.exists() or souther_version(str(local)) != SOUTHER_VERSION:
         print(f"downloading souther {SOUTHER_VERSION} into {SOUTHER_PREFIX} ...", file=sys.stderr)
         download(SOUTHER_URL, local)
         local.chmod(0o755)

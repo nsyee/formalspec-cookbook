@@ -3,7 +3,7 @@
 - 仕様本体: [`approval.sou`](approval.sou)
 - コンパイル時に検査される例（テーブル）: [`approval.examples.sou`](approval.examples.sou)
 - 対象仕様: [`../spec.md`](../spec.md)
-- ツール: [Souther](https://souther-lang.org/) 0.1.0（`souther fmt` / `compile` / `examples` / `run`）。Java 25 が必要。`PATH` や `JAVA_HOME` の Java が 25 未満なら Temurin JDK 25 が `.tools/jdk-25/` へ、Souther CLI（自己実行 jar）が `.tools/souther/` へ初回実行時にダウンロードされる。
+- ツール: [Souther](https://souther-lang.org/) 0.1.0（`souther fmt` / `compile` / `examples` / `run`）。Java 25 が必要。`PATH` や `JAVA_HOME` の Java が 25 未満なら Temurin JDK 25 が `.tools/jdk-25/` へ、Souther CLI（自己実行 jar）は `PATH` 上の `souther` が 0.1.0 ならそれを使い、そうでなければ（rc 版など）無視して 0.1.0 を `.tools/souther/` へダウンロードする。
 
 ## CLI での実行
 
