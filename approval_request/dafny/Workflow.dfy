@@ -1,16 +1,14 @@
 include "Properties.dfy"
 
-// The workflow as a mutable system: many requests, identified by a number,
-// under one directory.
+// ワークフローを可変なシステムとして表す: 1 つのディレクトリの下に、番号で識別される
+// 稟議申請が複数ある。
 //
-// Approval.dfy is pure and says what a single transition means; this module
-// is the imperative shell that the CLI drives. Its point is the class
-// invariant `Valid()`: every method requires it and ensures it, so the
-// verifier checks by induction over method calls that no sequence of
-// operations -- of any length, in any order -- can reach a state where a
-// request has an author outside its target department or a decided request
-// changes. That is the same argument a model checker makes by enumeration,
-// discharged here for an unbounded number of requests and users.
+// Approval.dfy は純粋で、遷移 1 回の意味を述べる。このモジュールは、CLI が動かす
+// 命令的な外層である。要はクラス不変条件 `Valid()` で、すべてのメソッドがこれを
+// requires し ensures する。だから検証器はメソッド呼び出しについての帰納で、
+// どの長さ・どの順序の操作列でも、申請の作成者が申請先部署の外にいる状態や、
+// 決裁済みの申請が変わる状態には到達できないことを検査する。これはモデル検査器が
+// 列挙で行うのと同じ議論を、申請数とユーザー数に上限を置かずに果たしている。
 module Workflow {
   import opened Approval
   import opened Properties
@@ -22,8 +20,8 @@ module Workflow {
     var requests: map<RequestId, Request>
     var nextId: RequestId
 
-    // A ghost field costs nothing at run time and lets the specification talk
-    // about the past: `history` is the trace the model checkers explore.
+    // ghost フィールドは実行時のコストがゼロで、仕様が過去について語れるようにする。
+    // `history` は、モデル検査器が探索するのと同じ実行トレースである。
     ghost var history: seq<(RequestId, UserId, Command)>
 
     ghost predicate Valid()
@@ -43,8 +41,8 @@ module Workflow {
       history := [];
     }
 
-    // Requirement A. The identifier is fresh, no other request is touched,
-    // and a refusal leaves the system alone.
+    // アクション A。識別子は新規で、他の申請には触れない。拒否された場合はシステムを
+    // 一切変えない。
     method Create(author: UserId, dep: DepartmentId, title: string, amount: int)
       returns (outcome: Outcome<RequestId>)
       requires Valid()
@@ -67,10 +65,9 @@ module Workflow {
       return Success(id);
     }
 
-    // Requirements B-F, driven by an arbitrary command. Everything the
-    // outside world may attempt goes through here, which is why the
-    // system-wide form of P2 is a postcondition of this method: whatever the
-    // command, a request that was already decided is bit-for-bit unchanged.
+    // アクション B〜F を、任意のコマンドで駆動する。外の世界が試みうることはすべてここを
+    // 通るので、システム全体としての P2 もこのメソッドの事後条件になる: コマンドが何であれ、
+    // すでに決裁済みの申請はビット単位で変わらない。
     method Execute(actor: UserId, id: RequestId, cmd: Command)
       returns (outcome: Outcome<Request>)
       requires Valid()
@@ -90,18 +87,17 @@ module Workflow {
       if id !in requests {
         return Failure(NoSuchRequest);
       }
-      // `:-` uses Outcome's IsFailure/PropagateFailure/Extract: a denial from
-      // the pure model becomes this method's result without a `match`.
+      // `:-` は Outcome の IsFailure / PropagateFailure / Extract を使う。純粋なモデル側の
+      // 拒否が、`match` なしでそのままこのメソッドの結果になる。
       var next :- Step(directory, actor, requests[id], cmd);
       requests := requests[id := next];
       history := history + [(id, actor, cmd)];
       return Success(next);
     }
 
-    // The read rule as a query rather than a predicate (R1 and R2): the
-    // postconditions say the answer is exactly the readable set, so a
-    // filtering bug is a verification error. The loop needs its own
-    // invariants and a termination measure.
+    // 閲覧規則を、述語ではなく問い合わせとして表す（R1 と R2）。事後条件が、答えは
+    // 閲覧可能な申請の集合そのものであると述べているので、絞り込みのバグは検証エラーになる。
+    // ループにはそれ自身の不変条件と停止測度が必要である。
     method Readable(actor: UserId) returns (visible: set<RequestId>)
       requires Valid()
       ensures forall id <- visible :: id in requests && CanRead(directory, actor, requests[id])
@@ -125,8 +121,8 @@ module Workflow {
       }
     }
 
-    // P3 for the stored requests: the directory invariant travels through
-    // `Valid()`, so no request in the system is stuck without a decider.
+    // 保持されている申請に対する P3。ディレクトリの不変条件は `Valid()` を通して伝わるので、
+    // システム内のどの申請も決裁者のいないまま行き詰まらない。
     lemma NoOrphanRequest(id: RequestId)
       requires Valid()
       requires id in requests && requests[id].status.Pending?

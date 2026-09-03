@@ -1,38 +1,35 @@
-// Approval Request workflow in Dafny: the data model, the authority
-// predicates and the transitions.
+// 稟議申請システムの Dafny モデル: データモデル、権限の述語、そして遷移。
 //
-// The other models in this repository explore a bounded state space (Alloy,
-// TLA+, Quint) or a request/policy pair (Cedar). Dafny instead *proves*
-// statements about every value of a type, so the modeling weight moves to the
-// types and to the pre/postconditions of the functions:
+// 自然言語での仕様は ../spec.md を参照。
 //
-//   - Well-formedness lives in subset types (`Directory`, `Title`, `Amount`).
-//     A value of type `Directory` cannot violate "every department has a
-//     manager", so that requirement is not restated in any precondition.
-//   - Each transition is a *total function with a precondition*: `Approve`
-//     requires the request to be Pending and the actor to be a manager of the
-//     target department, and its postcondition pins down the next status. The
-//     precondition is discharged by the verifier at every call site, so
-//     "approving a Draft" is not a runtime denial but an unprovable program.
-//   - `Step` is the one entry point that accepts an arbitrary (request,
-//     command) pair from the outside world. It answers with a failure-
-//     compatible `Outcome`, which lets callers use `:-` to propagate denials.
+// このリポジトリの他のモデルは、有界な状態空間を探索する（Alloy / TLA+ / Quint）か、
+// 要求とポリシーの組を扱う（Cedar）。対して Dafny は、ある型のすべての値についての
+// 命題を *証明* するので、モデル化の重心は型と、関数の事前・事後条件に移る:
 //
-// Properties.dfy proves P1-P3 and the access-control rules of spec.md against
-// these definitions; Workflow.dfy runs them as a mutable system.
+//   - 整合条件は部分型（`Directory` / `Title` / `Amount`）に持たせる。`Directory`
+//     型の値は「各部署に上長が 1 名以上」を破れないので、この要件をどの事前条件でも
+//     再掲しなくてよい。
+//   - 各遷移は *事前条件付きの全域関数* である。`Approve` は申請が Pending であることと
+//     実行者が申請先部署の上長であることを要求し、事後条件で遷移先の状態を特定する。
+//     事前条件は各呼び出し地点で検証器が果たすので、「Draft を承認する」は実行時の拒否では
+//     なく証明できないプログラムになる。
+//   - `Step` は、外の世界からの任意の (稟議申請, コマンド) の組を受け取る単一の入口。
+//     failure-compatible な `Outcome` を返すので、呼び出し側は `:-` で拒否を伝播できる。
+//
+// Properties.dfy はこれらの定義に対して P1〜P3 と spec.md のアクセス制御規則を証明し、
+// Workflow.dfy はこれらを可変なシステムとして動かす。
 module Approval {
 
-  // === Identifiers, roles and the directory ===
+  // === 識別子・役職・ディレクトリ ===
 
   type UserId = s: string | s != "" witness "u"
   type DepartmentId = s: string | s != "" witness "d"
 
   datatype Role = Member | Manager
 
-  // Roles are contextual: the key is the (user, department) pair, never the
-  // user alone. A map keyed by the pair makes "one role per affiliation"
-  // structural, so unlike the relational models there is no extra invariant
-  // for it.
+  // 役職は文脈依存である: キーは (ユーザー, 部署) の組であり、ユーザー単体ではない。
+  // この組をキーとする map にすると「1 つの所属につき役職は 1 つ」が構造で保証されるので、
+  // 関係で表すモデルと違ってこのための不変条件を置く必要がない。
   type Assignment = map<(UserId, DepartmentId), Role>
 
   ghost predicate HasManager(a: Assignment, dep: DepartmentId) {
@@ -43,10 +40,9 @@ module Approval {
     forall k <- a.Keys :: HasManager(a, k.1)
   }
 
-  // The organisation chart, carrying the invariant of spec.md section 1
-  // ("each department has at least one Manager") in its type. The witness is
-  // the smallest chart there is: one manager of one department. Dafny checks
-  // that the witness satisfies the constraint, so the type is inhabited.
+  // 組織図。spec.md §1 の不変条件（「各部署には必ず 1 名以上の上長が存在する」）を
+  // 型の中に持つ。証人はありえる最小の組織図、すなわち 1 部署とその上長 1 名。
+  // Dafny は証人が制約を満たすことを検査するので、この型が空でないと分かる。
   const SomeUser: UserId := "u"
   const SomeDepartment: DepartmentId := "d"
 
@@ -61,16 +57,15 @@ module Approval {
     (user, dep) in dir && dir[(user, dep)] == Manager
   }
 
-  // === Requests ===
+  // === 稟議申請 ===
 
   type Title = s: string | s != "" witness "t"
   type Amount = n: int | 0 <= n witness 0
 
   datatype Content = Content(title: Title, amount: Amount)
 
-  // Raw input is turned into a constrained value by a function with the
-  // constraint as its precondition; the caller has to establish it, and the
-  // value carries it from then on.
+  // 生の入力を制約付きの値にするのは、その制約を事前条件に持つ関数である。呼び出し側が
+  // 制約を示す必要があり、以降は値自体がそれを持ち運ぶ。
   function AsTitle(s: string): Title
     requires s != ""
   {
@@ -83,9 +78,9 @@ module Approval {
     n
   }
 
-  // One case per state of spec.md section 2. A state carries exactly the
-  // fields that exist in it: who decided is recorded by the case that records
-  // the decision, so "a Draft with an approver" is not writable.
+  // spec.md §2 の状態ごとに 1 ケース。各状態はそこに存在するフィールドだけを持ち、
+  // 誰が決裁したかはその決裁を記録するケースにしか現れない。だから「承認者を持つ Draft」は
+  // そもそも書けない。
   datatype Status =
     | Draft
     | Pending
@@ -103,14 +98,13 @@ module Approval {
     content: Content,
     status: Status)
 
-  // The author must be affiliated with the target department (spec.md
-  // section 1). This is a relation between a request and a directory rather
-  // than a property of the request alone, so it stays a predicate.
+  // 作成者は申請先部署に所属していなければならない（spec.md §1）。これは申請単体の
+  // 性質ではなく申請とディレクトリの間の関係なので、型ではなく述語として置く。
   ghost predicate WellFormed(dir: Directory, r: Request) {
     IsAffiliated(dir, r.author, r.department)
   }
 
-  // === Access control (spec.md section 3) ===
+  // === アクセス制御（spec.md §3）===
 
   predicate CanRead(dir: Directory, actor: UserId, r: Request) {
     IsAffiliated(dir, actor, r.department) // R1, R2
@@ -119,26 +113,24 @@ module Approval {
   predicate CanEdit(dir: Directory, actor: UserId, r: Request) {
     || (actor == r.author && (r.status.Draft? || r.status.Returned?)) // U1
     || (IsManagerOf(dir, actor, r.department) && !Terminal(r.status)) // U3
-    // U2 is the absence of a third disjunct.
+    // U2 は、第 3 の項がないことそのもの。
   }
 
   predicate CanSubmit(actor: UserId, r: Request) {
     actor == r.author && (r.status.Draft? || r.status.Returned?) // C
   }
 
-  // D, E and F share one authority rule, which mentions only the actor's role
-  // *in the target department*. P1 (no authority leak between departments)
-  // and the self-approval note of spec.md section 4.D are both consequences
-  // of this single predicate.
+  // D / E / F は権限規則を 1 つ共有し、その規則は *申請先部署での* 実行者の役職にしか
+  // 言及しない。P1（部署間で権限が漏れないこと）と spec.md §4 D の自己決裁の注は、
+  // どちらもこの 1 つの述語から導かれる。
   predicate CanDecide(dir: Directory, actor: UserId, r: Request) {
     r.status.Pending? && IsManagerOf(dir, actor, r.department)
   }
 
-  // === Transitions (spec.md section 4) ===
+  // === 遷移（spec.md §4）===
 
-  // `create` is the only transition that builds content out of raw input, so
-  // it is the only one that can be given values its type forbids; hence the
-  // Outcome. The postcondition is the postcondition of requirement A.
+  // 生の入力から内容を組み立てる遷移は `Create` だけで、型が禁じる値を渡されうるのも
+  // ここだけである（だから Outcome を返す）。事後条件はアクション A の事後条件そのもの。
   function Create(
     dir: Directory,
     author: UserId,
@@ -155,9 +147,8 @@ module Approval {
     else Success(Request(author, dep, Content(AsTitle(title), AsAmount(amount)), Draft))
   }
 
-  // Editing keeps the status and the author, and only replaces the content
-  // (requirement B). Writing that as a postcondition means the callers of
-  // `Edit` -- including `Step` -- get it for free.
+  // 編集は状態と作成者を保ち、内容だけを差し替える（アクション B）。これを事後条件として
+  // 書いておけば、`Edit` の呼び出し側（`Step` も含む）はそれをただで得られる。
   function Edit(dir: Directory, actor: UserId, r: Request, content: Content): Request
     requires CanEdit(dir, actor, r)
     ensures Edit(dir, actor, r, content) == r.(content := content)
@@ -194,7 +185,7 @@ module Approval {
     r.(status := Returned(actor))
   }
 
-  // === Commands and denials ===
+  // === コマンドと拒否 ===
 
   datatype Command =
     | EditCommand(content: Content)
@@ -212,9 +203,9 @@ module Approval {
     | InvalidContent
     | NoSuchRequest
 
-  // A failure-compatible result type: `IsFailure`/`PropagateFailure`/`Extract`
-  // are what Dafny looks for to enable `var x :- expr;`, so callers of the
-  // model (Workflow.dfy, Scenarios.dfy) propagate denials without a `match`.
+  // failure-compatible な結果型。`var x :- expr;` を使えるようにするために Dafny が
+  // 探すのが `IsFailure` / `PropagateFailure` / `Extract` である。おかげでモデルの
+  // 呼び出し側（Workflow.dfy / Scenarios.dfy）は `match` なしで拒否を伝播できる。
   datatype Outcome<T> = Success(value: T) | Failure(denial: Denial)
   {
     predicate IsFailure() {
@@ -234,17 +225,15 @@ module Approval {
     }
   }
 
-  // === The dynamic entry point ===
+  // === 動的な入口 ===
 
-  // The transitions above cannot be misapplied: their preconditions are
-  // proved at every call site. A command arriving from outside, however, is
-  // an arbitrary pair of a request and a command, so `Step` classifies the
-  // pair and delegates. It is total: every (status, command) cell answers,
-  // either with the next request or with a denial.
+  // 上の遷移は誤って適用できない。事前条件が各呼び出し地点で証明されるからである。しかし
+  // 外から届くのは任意の (稟議申請, コマンド) の組なので、`Step` がその組を分類して委譲する。
+  // `Step` は全域的で、(状態, コマンド) のすべての組に対して、遷移後の申請か拒否の
+  // いずれかを返す。
   //
-  // An actor who may not even read the request learns nothing about its
-  // state: the affiliation check comes first, and terminal requests are
-  // answered before the command is looked at (P2).
+  // その申請を閲覧すらできない実行者には状態を漏らさない: 最初に所属を検査し、
+  // 終端状態の申請にはコマンドを見る前に答える（P2）。
   function Step(dir: Directory, actor: UserId, r: Request, cmd: Command): Outcome<Request>
     ensures Step(dir, actor, r, cmd).Success? ==> CanRead(dir, actor, r)
     ensures Step(dir, actor, r, cmd).Success? ==> !Terminal(r.status)

@@ -1,12 +1,12 @@
 include "../Approval.dfy"
 
-// A claim that must NOT verify: "a manager of some department may decide any
-// request". This is the mistake property P1 is about -- treating Manager as a
-// user attribute instead of a role inside one department.
+// 検証を通ってはならない主張: 「どこかの部署の上長なら、どの申請でも決裁できる」。これは
+// 性質 P1 が対象とする誤り——上長を、1 つの部署の中での役職ではなくユーザーの属性として
+// 扱ってしまう誤りである。
 //
 // `./scripts/dafny.py verify approval_request/dafny --only negative-authority-leak`
-// expects this file to fail, and the counterexample the verifier prints is the
-// counterexample a model checker would produce.
+// はこのファイルが失敗することを期待しており、検証器が出す反例は、モデル検査器が出すのと
+// 同じ反例である。
 module NegativeAuthorityLeak {
   import opened Approval
 

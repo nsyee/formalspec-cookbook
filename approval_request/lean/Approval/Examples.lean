@@ -2,19 +2,19 @@ import Approval.Properties
 import Approval.Scenario
 
 /-!
-# A concrete organisation and the spec's scenarios
+# 具体的な組織と、仕様のシナリオ
 
-Three users, two departments, one cross-affiliated user:
+ユーザー 3 人、部署 2 つ、うち 1 人は兼務:
 
-| user  | sales   | eng     |
-| ----- | ------- | ------- |
-| alice | member  | –       |
-| bob   | manager | –       |
-| carol | member  | manager |
+| ユーザー | sales        | eng          |
+| ------ | ------------ | ------------ |
+| alice  | 一般メンバー   | –            |
+| bob    | 上長         | –            |
+| carol  | 一般メンバー   | 上長         |
 
-The `example`s below are checked by `decide` — the kernel evaluates
-`Action.apply` — and every scenario is also `#guard`ed at compile time. The CLI
-(`lake exe approval`) replays the same scenarios as readable traces.
+下の `example` は `decide` で検査され（カーネルが `Action.apply` を評価する）、
+各シナリオもコンパイル時に `#guard` で検査される。CLI（`lake exe approval`）は
+同じシナリオを、読めるトレースとして再生する。
 -/
 
 namespace Approval.Examples
@@ -43,50 +43,52 @@ def dir : Directory User Dept where
     | carol, eng => some .manager
     | _, _ => none
 
-/-- Every department has a manager, witnessed explicitly. -/
+/-- 各部署に上長が 1 名以上いることを、証人を明示して示す。 -/
 theorem dir_wf : dir.WF where
   managerExists
     | sales => ⟨bob, rfl⟩
     | eng => ⟨carol, rfl⟩
 
-/-! ## Facts about single steps, settled by evaluation -/
+/-! ## 評価だけで判定できる、単一遷移についての事実 -/
 
 def aliceDraft : Request User Dept := { author := alice, target := sales }
 def alicePending : Request User Dept := { aliceDraft with status := .pending }
 def carolPending : Request User Dept := { author := carol, target := sales, status := .pending }
 def bobPending : Request User Dept := { author := bob, target := sales, status := .pending }
 
-/-- C: the author submits a draft. -/
+/-- C: 作成者が Draft を提出する。 -/
 example : Step dir alice .submit aliceDraft alicePending := by decide
 
-/-- D: a manager of the target department approves. -/
+/-- D: 申請先部署の上長が承認する。 -/
 example : Step dir bob (.decide .approve) alicePending { alicePending with status := .approved } := by
   decide
 
-/-- Self-approval: bob is author *and* sales manager. -/
+/-- 自己決裁: bob は作成者であり、*かつ* sales の上長でもある。 -/
 example : Step dir bob (.decide .approve) bobPending { bobPending with status := .approved } := by
   decide
 
-/-- P1: carol manages eng but is a member of sales; she cannot approve her own sales request. -/
+/-- P1: carol は eng の上長だが sales では一般メンバーなので、自分が作成した
+sales 宛ての申請を承認できない。 -/
 example : ¬ Step dir carol (.decide .approve) carolPending { carolPending with status := .approved } := by
   decide
 
-/-- The same fact, derived from the general theorem rather than by evaluation. -/
+/-- 同じ事実を、評価ではなく一般の定理から導いたもの。 -/
 example : ¬ Step dir carol (.decide .approve) carolPending { carolPending with status := .approved } :=
   P1_no_authority_leak (x := eng) rfl rfl
 
-/-- U2: a fellow member (carol) may not edit alice's draft, but the manager (bob) may (U3). -/
+/-- U2: 同じ部署の一般メンバー（carol）は alice の Draft を編集できないが、
+上長（bob）は編集できる（U3）。 -/
 example : ¬ dir.CanEdit carol aliceDraft := by decide
 example : dir.CanEdit bob aliceDraft := by decide
 
-/-- U1: the author may edit while `Draft`, but not once `Pending`. -/
+/-- U1: 作成者は `Draft` の間は編集できるが、`Pending` になると編集できない。 -/
 example : dir.CanEdit alice aliceDraft := by decide
 example : ¬ dir.CanEdit alice alicePending := by decide
 
-/-- R2: nobody outside sales can read a sales request; alice cannot read eng requests. -/
+/-- R2: 所属していない部署宛ての申請は閲覧できない。alice は eng 宛ての申請を読めない。 -/
 example : ¬ dir.CanRead alice { author := carol, target := eng } := by decide
 
-/-- A full trace as a proof term: alice's request is approved after a round trip. -/
+/-- 証明項として書いた完全なトレース: alice の申請が差し戻しと再提出を経て承認される。 -/
 example : Reachable dir { aliceDraft with status := .approved } :=
   .step (actor := bob) (.step (actor := alice) (.step (actor := bob) (.step (actor := alice)
     (.create (by decide))
@@ -95,7 +97,7 @@ example : Reachable dir { aliceDraft with status := .approved } :=
     (.submit rfl (.inr rfl)))
     (.decide .approve rfl rfl)
 
-/-! ## Scenarios (replayed by the CLI) -/
+/-! ## シナリオ（CLI が再生する） -/
 
 def happyPath : Scenario User Dept where
   name := "happy-path"

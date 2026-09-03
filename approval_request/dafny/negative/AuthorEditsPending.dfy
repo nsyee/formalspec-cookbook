@@ -1,10 +1,9 @@
 include "../Approval.dfy"
 
-// A claim that must NOT verify: "the author may always edit their own
-// request". Requirement U1 stops at Draft and Returned; once the request is
-// Pending, only a manager of the target department may edit it (U3). Keeping
-// the wrong reading here as a failing check means that widening `CanEdit` by
-// accident cannot pass CI unnoticed.
+// 検証を通ってはならない主張: 「作成者は自分の申請をいつでも編集できる」。アクション U1 は
+// Draft と Returned までで、申請が Pending になったら編集できるのは申請先部署の上長だけ
+// である（U3）。誤った読みを失敗するチェックとしてここに残しておくことで、`CanEdit` を
+// うっかり広げてしまっても気付かれずに CI を通ることがなくなる。
 module NegativeAuthorEditsPending {
   import opened Approval
 
