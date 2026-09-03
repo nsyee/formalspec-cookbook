@@ -1,11 +1,11 @@
 import Approval
 
 /-!
-Axiom audit, run by `scripts/lean.py` (`lake env lean Audit.lean`).
+公理の監査。`scripts/lean.py` が実行する（`lake env lean Audit.lean`）。
 
-Each line prints the axioms a theorem depends on. The driver fails if `sorryAx`
-appears anywhere — i.e. if a proof was left incomplete — and reports the set of
-standard axioms (`propext`, `Classical.choice`, `Quot.sound`) actually used.
+各行は、その定理が依存する公理を出力する。`sorryAx` がどこかに現れたら
+——すなわち証明が未完成のままなら——ドライバは失敗とし、実際に使われた標準の公理
+（`propext`, `Classical.choice`, `Quot.sound`）を報告する。
 -/
 
 open Approval

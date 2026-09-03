@@ -1,17 +1,17 @@
-// Compile-time checked examples for approval_request.
+// approval_request の、コンパイル時に検査される例。
 //
-// Every row here is evaluated by `souther compile`; a row whose expectation
-// does not hold is a compile error, so these are the executable counterpart
-// of the Alloy assertions, the TLA+ invariants and the Cedar test fixtures in
-// the sibling directories. The fixtures live here rather than in the model
-// (`examples for` keeps them out of the published module).
+// ここの各行は `souther compile` が評価し、期待が成り立たない行はコンパイル
+// エラーになる。したがって、兄弟ディレクトリにある Alloy の assertion、TLA+ の
+// 不変条件、Cedar のテストフィクスチャに対応するものの、実行可能版である。
+// フィクスチャはモデル本体ではなくここに置く（`examples for` にすると、
+// 公開されるモジュールに含まれない）。
 //
-// Cast (mirrors approval_request/spec.md):
-//   alice  member of sales                    -- the usual author
-//   bob    manager of sales, member of eng    -- decides on sales requests
-//   carol  manager of eng                     -- a manager, but of another department
-//   dave   member of eng                      -- not affiliated with sales at all
-//   e / x  the shortest identifiers the invariants admit (boundary fixtures)
+// 登場人物（approval_request/spec.md に合わせている）:
+//   alice  sales の一般メンバー                 -- 標準的な作成者
+//   bob    sales の上長、eng の一般メンバー      -- sales 宛ての申請を決裁する
+//   carol  eng の上長                          -- 上長だが、別の部署の上長
+//   dave   eng の一般メンバー                   -- sales には全く所属していない
+//   e / x  不変条件が認める最短の識別子（境界値のフィクスチャ）
 examples for approval_request
 
 let alice = UserId("alice")
@@ -50,10 +50,10 @@ let aliceApproved =
 let aliceRejected =
     Rejected { author = alice, department = sales, content = laptop, rejectedBy = bob }
 
-// bob is both the author and a manager of the target department.
+// bob は作成者本人であり、かつ申請先部署の上長でもある。
 let bobPending = Pending { author = bob, department = sales, content = desk }
 
-// === Directory: uniqueness and P3 (every department has a manager) ===
+// === ディレクトリ: 一意性と P3（各部署に上長が 1 名以上）===
 example registerDirectory
     | "a consistent directory is accepted"                 : (entries) -> Directory
     | "one user cannot hold two roles in one department"
@@ -78,7 +78,7 @@ example registerDirectory
         -> DepartmentWithoutManager
     | "an empty directory has no department to violate P3" : ([])      -> Directory
 
-// === Create (A) ===
+// === 申請の作成（§4 A）===
 example create
     | "an affiliated member creates a Draft in their department"
         : (org, alice, sales, "Laptop", 1500)
@@ -99,7 +99,7 @@ example create
         -> InvalidContent
     | "zero is the smallest accepted amount"           : (org, alice, sales, "Laptop", 0) -> Draft
 
-// === Read (R1, R2) ===
+// === 閲覧（§3 R1, R2）===
 example read
     | "the author reads their own request"                 : (org, alice, aliceDraft)   -> Draft
     | "any member of the target department reads it, whatever the state"
@@ -115,7 +115,7 @@ example read
         : (org, alice, aliceReturned)
         -> Returned { author = alice, department = sales, content = laptop, returnedBy = bob }
 
-// === Edit (U1, U2, U3) ===
+// === 申請の編集（§3 U1, U2, U3）===
 example edit
     | "the author edits a Draft"
         : (org, alice, aliceDraft, desk)
@@ -141,7 +141,7 @@ example edit
         : (org, carol, aliceReturned, desk)
         -> NotAuthor
 
-// === Submit (C) ===
+// === 申請の提出 / 再提出（§4 C）===
 example submit
     | "the author submits a Draft"
         : (alice, aliceDraft)
@@ -153,7 +153,7 @@ example submit
         : (bob, aliceDraft)
         -> NotAuthor
 
-// === Approve / Reject / Return (D, E, F) ===
+// === 承認 / 却下 / 差し戻し（§4 D, E, F）===
 example approve
     | "the target department's manager approves"
         : (org, bob, alicePending)
@@ -182,10 +182,10 @@ example return
         -> Returned { author = alice, department = sales, content = laptop, returnedBy = bob }
     | "a member cannot return it" : (org, dave, alicePending) -> NotManager
 
-// === Decide: every (state, command) cell ===
-// P2 (terminal immutability) is answered here: the typed behaviors cannot even
-// be applied to Approved / Rejected, and `decide` maps every command an
-// affiliated actor sends against a terminal request to TerminalRequest.
+// === decide: (状態, コマンド) のすべての組 ===
+// P2（終端状態の不変性）に答えるのはここである: 型付きの behavior は
+// Approved / Rejected に適用すらできず、終端状態の申請に対して所属ユーザーが
+// 送ったコマンドは、`decide` がすべて TerminalRequest に写す。
 example decide
     | "an actor with no affiliation to the department is denied first"
         : (org, dave, alicePending, ApproveCommand)

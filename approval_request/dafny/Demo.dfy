@@ -1,13 +1,12 @@
 include "Scenarios.dfy"
 
-// The model as a program: `dafny run` compiles this file and executes the
-// commands given on the command line against the demo organisation.
+// モデルをプログラムとして見る: `dafny run` はこのファイルをコンパイルし、コマンドラインで
+// 与えたコマンドをデモ組織に対して実行する。
 //
-// Nothing here is part of the specification -- it is the shell that makes the
-// verified model observable from a terminal. The interesting part is that the
-// glue is verified too: `Apply` requires and preserves the class invariant, so
-// the front end cannot drive the workflow into a state the proofs do not
-// cover.
+// ここには仕様の一部は何もない——検証済みのモデルを端末から観察できるようにする
+// 外層である。面白いのは、その接続部分も検証されていることだ: `Apply` はクラス不変条件を
+// requires し保つので、フロントエンドがワークフローを、証明がカバーしていない状態に
+// 追い込むことはできない。
 //
 //   $ ./scripts/dafny.py run approval_request/dafny \
 //       'alice create sales laptop 1500' 'alice submit 0' 'bob approve 0'
@@ -16,7 +15,7 @@ module Demo {
   import opened Workflow
   import opened Scenarios
 
-  // === Text helpers (verified, so the parser cannot index out of bounds) ===
+  // === 文字列の補助関数（検証済みなので、パーサーが範囲外を参照することはない）===
 
   function Split(s: string, sep: char): (parts: seq<string>)
     ensures |parts| >= 1
@@ -28,7 +27,7 @@ module Demo {
       if s[0] == sep then [""] + rest else [[s[0]] + rest[0]] + rest[1..]
   }
 
-  // -1 stands for "not a decimal number", which keeps the parser total.
+  // -1 は「十進数でない」を表す。こうしてパーサーを全域的に保つ。
   function ParseInt(s: string, acc: int := 0): int
     requires acc >= 0
     decreases |s|
@@ -76,9 +75,9 @@ module Demo {
     case Failure(d) => ShowDenial(d)
   }
 
-  // === One command line ===
+  // === コマンド 1 行 ===
 
-  // Accepted forms, one per argument:
+  // 受け付ける形式（引数 1 つにつき 1 行）:
   //   <actor> create <department> <title> <amount>
   //   <actor> edit <id> <title> <amount>
   //   <actor> submit|approve|reject|return <id>
@@ -168,11 +167,11 @@ module Demo {
   function DefaultSession(): seq<string> {
     ["alice create sales laptop 1500",
      "alice submit 0",
-     "carol approve 0", // P1: carol manages eng, not sales
+     "carol approve 0", // P1: carol は eng の上長で、sales の上長ではない
      "bob return 0",
      "alice submit 0",
      "bob approve 0",
-     "bob reject 0", // P2: the decision is final
-     "dave readable"] // R2: dave is not affiliated with sales
+     "bob reject 0", // P2: 決裁は終局的である
+     "dave readable"] // R2: dave は sales に所属していない
   }
 }
