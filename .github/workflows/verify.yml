@@ -104,3 +104,17 @@ jobs:
           path: .tools
           key: dafny-${{ runner.os }}-${{ hashFiles('scripts/dafny.py') }}
       - run: make verify-dafny
+
+  lemmascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Cache the LemmaScript CLI and the Dafny distribution
+        uses: actions/cache@v4
+        with:
+          path: .tools
+          key: lemmascript-${{ runner.os }}-${{ hashFiles('scripts/lemmascript.py', 'scripts/dafny.py') }}
+      - run: make verify-lemmascript
