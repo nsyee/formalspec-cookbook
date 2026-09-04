@@ -1,21 +1,21 @@
 /**
- * LemmaScript model of the approval request system (../spec.md).
+ * 稟議申請システム（../spec.md）の LemmaScript モデル。
  *
- * The program is plain TypeScript: the same functions run as-is under Node.js
- * (scenarios.ts) and are compiled to Dafny by `lsc`. The `//@` annotations become Dafny
- * `requires` / `ensures` / `invariant`. Everything that is proved for all directories,
- * requests and traces -- P1..P3 and the access rules of spec.md section 3 -- is stated as
- * `//@ ensures` in this file. Proof-only material (helper lemmas, `modifies` clauses, the
- * specification-side bodies of `//@ pure` functions) is *appended* in the proof-owned file
- * `approval.dfy` next to the generated `approval.dfy.gen`. See README.md.
+ * プログラム本体は普通の TypeScript である。同じ関数が Node.js でそのまま動き
+ * （scenarios.ts）、`lsc` によって Dafny にコンパイルされる。`//@` 注釈は Dafny の
+ * `requires` / `ensures` / `invariant` になる。すべての名簿・申請・トレースについて
+ * 証明される事柄——P1〜P3 と spec.md 3 章の権限規則——はこのファイルの `//@ ensures`
+ * として述べる。証明専用の材料（補助補題、`modifies` 節、`//@ pure` な関数の仕様側の
+ * 本体）は、生成物 `approval.dfy.gen` の隣にある証明所有ファイル `approval.dfy` に
+ * *追記* する。詳しくは README.md。
  *
- * Every function carries `//@ verify` because the class at the end needs it: once one
- * declaration opts in, `lsc` verifies only the declarations that opted in.
+ * すべての関数に `//@ verify` が付いているのは、末尾のクラスがそれを必要とするため。
+ * 1 つでも opt-in した宣言があると、`lsc` は opt-in した宣言だけを検証する。
  */
 
 //@ backend dafny
 
-// === Identifiers, roles and the directory (spec.md section 1) ===
+// === 識別子・役職・名簿（spec.md 1 章） ===
 
 export type UserId = string;
 export type DepartmentId = string;
@@ -23,10 +23,9 @@ export type DepartmentId = string;
 export type Role = "Member" | "Manager";
 
 /**
- * A role is an attribute of a (user, department) pair, so the directory keeps, per user, a
- * map "department the user belongs to -> role in that department". One user may appear in
- * several departments with different roles. A Map key holds one value, so "one role per
- * affiliation" needs no invariant.
+ * 役職は (ユーザー, 部署) の組の属性なので、名簿はユーザーごとに「所属する部署 → その
+ * 部署での役職」の写像を持つ。1 人のユーザーが複数の部署に別々の役職で現れてよい。
+ * Map のキーは値を 1 つしか持てないので、「1 所属につき役職は 1 つ」に不変条件は要らない。
  */
 export interface Directory {
   roles: Map<UserId, Map<DepartmentId, Role>>;
@@ -34,7 +33,7 @@ export interface Directory {
 
 export function isAffiliated(dir: Directory, user: UserId, dep: DepartmentId): boolean {
   //@ verify
-  //@ contract True iff `user` holds some role in `dep`.
+  //@ contract `user` が `dep` で何らかの役職を持つとき、かつそのときに限り真。
   const affiliations = dir.roles.get(user);
   if (affiliations === undefined) return false;
   return affiliations.has(dep);
@@ -42,7 +41,7 @@ export function isAffiliated(dir: Directory, user: UserId, dep: DepartmentId): b
 
 export function isManagerOf(dir: Directory, user: UserId, dep: DepartmentId): boolean {
   //@ verify
-  //@ contract True iff `user` is a Manager of `dep` -- the role in *that* department, whatever the user is elsewhere.
+  //@ contract `user` が `dep` の上長であるとき、かつそのときに限り真——他の部署で何であっても、*その*部署での役職を見る。
   //@ ensures \result ==> isAffiliated(dir, user, dep)
   const affiliations = dir.roles.get(user);
   if (affiliations === undefined) return false;
@@ -50,25 +49,25 @@ export function isManagerOf(dir: Directory, user: UserId, dep: DepartmentId): bo
 }
 
 /**
- * spec.md section 1: every department has at least one Manager. The loop is the runtime
- * side; `//@ pure` makes the function usable inside specifications too. The quantifier the
- * loop must agree with (the specification-side body) is supplied by approval.dfy.
+ * spec.md 1 章: すべての部署に上長が 1 名以上いる。ループが実行側で、`//@ pure` に
+ * よってこの関数は仕様の中でも使えるようになる。ループが一致すべき量化子（仕様側の
+ * 本体）は approval.dfy が与える。
  */
 export function hasManager(dir: Directory, dep: DepartmentId): boolean {
   //@ verify
   //@ pure
-  //@ contract True iff some user of the directory is a Manager of `dep`.
+  //@ contract 名簿の誰かが `dep` の上長であるとき、かつそのときに限り真。
   for (const [user, affiliations] of dir.roles) {
     if (affiliations.get(dep) === "Manager") return true;
   }
   return false;
 }
 
-/** Well-formedness of the directory: no department is left without a Manager. */
+/** 名簿の整合条件: 上長のいない部署を残さない。 */
 export function departmentsHaveManagers(dir: Directory): boolean {
   //@ verify
   //@ pure
-  //@ contract True iff every department that appears in any affiliation has a Manager.
+  //@ contract いずれかの所属に現れるすべての部署に上長がいるとき、かつそのときに限り真。
   for (const [user, affiliations] of dir.roles) {
     for (const [dep, role] of affiliations) {
       if (!hasManager(dir, dep)) return false;
@@ -77,7 +76,7 @@ export function departmentsHaveManagers(dir: Directory): boolean {
   return true;
 }
 
-// === Requests (spec.md section 2) ===
+// === 稟議申請（spec.md 2 章） ===
 
 export interface Content {
   title: string;
@@ -90,9 +89,9 @@ export function validContent(c: Content): boolean {
 }
 
 /**
- * One variant per state of spec.md section 2. Decisions record who made them, but only the
- * variants produced by a decision carry that field, so "a Draft with an approver" cannot be
- * written.
+ * spec.md 2 章の状態ごとに 1 つのバリアント。決裁は誰が行ったかを記録するが、その
+ * フィールドを持つのは決裁の結果として生じるバリアントだけなので、「承認者のいる
+ * Draft」は書けない。
  */
 export type Status =
   | { kind: "Draft" }
@@ -118,24 +117,24 @@ export interface Request {
   status: Status;
 }
 
-/** The author belongs to the target department (spec.md section 1). */
+/** 申請者は申請先部署に所属している（spec.md 1 章）。 */
 export function wellFormed(dir: Directory, r: Request): boolean {
   //@ verify
   return isAffiliated(dir, r.author, r.department);
 }
 
-// === Access control (spec.md section 3) ===
+// === アクセス制御（spec.md 3 章） ===
 
 export function canRead(dir: Directory, actor: UserId, r: Request): boolean {
   //@ verify
-  //@ contract R1/R2: being able to read is the same as being affiliated with the target department.
+  //@ contract R1/R2: 閲覧できることと、申請先部署に所属していることは同じ。
   //@ ensures \result === isAffiliated(dir, actor, r.department)
   return isAffiliated(dir, actor, r.department);
 }
 
 export function canEdit(dir: Directory, actor: UserId, r: Request): boolean {
   //@ verify
-  //@ contract U1: the author edits Draft / Returned. U3: a Manager of the target department edits undecided requests. U2: nobody else edits.
+  //@ contract U1: 申請者は Draft / Returned を編集できる。U3: 申請先部署の上長は決裁前の申請を編集できる。U2: それ以外は誰も編集できない。
   //@ ensures \result ==> !isTerminal(r.status)
   //@ ensures actor === r.author && isEditableByAuthor(r.status) ==> \result
   //@ ensures isManagerOf(dir, actor, r.department) && r.status.kind === "Pending" ==> \result
@@ -148,24 +147,24 @@ export function canEdit(dir: Directory, actor: UserId, r: Request): boolean {
 
 export function canSubmit(actor: UserId, r: Request): boolean {
   //@ verify
-  //@ contract C: only the author submits, and only from Draft or Returned.
+  //@ contract C: 提出できるのは申請者だけで、Draft または Returned からに限る。
   //@ ensures \result === (actor === r.author && isEditableByAuthor(r.status))
   return actor === r.author && isEditableByAuthor(r.status);
 }
 
 /**
- * D / E / F share one rule, and that rule only looks at the actor's role *in the target
- * department*. Both P1 (no authority leak) and the note on self-approval in spec.md
- * section 4 D follow from this single function.
+ * D / E / F は 1 つの規則を共有し、その規則は実行者の *申請先部署での* 役職しか見ない。
+ * P1（権限の漏れがない）と spec.md 4 章 D の自己承認についての注記は、どちらも
+ * この 1 つの関数から従う。
  */
 export function canDecide(dir: Directory, actor: UserId, r: Request): boolean {
   //@ verify
-  //@ contract A Pending request is decided by a Manager of its target department.
+  //@ contract Pending の申請を決裁するのは、その申請先部署の上長である。
   //@ ensures \result === (r.status.kind === "Pending" && isManagerOf(dir, actor, r.department))
   return r.status.kind === "Pending" && isManagerOf(dir, actor, r.department);
 }
 
-// === Transitions (spec.md section 4) ===
+// === 遷移（spec.md 4 章） ===
 
 export type Command =
   | { kind: "Edit"; content: Content }
@@ -197,10 +196,10 @@ export function failure(d: Denial): Outcome {
   return { kind: "Failure", denial: d };
 }
 
-/** Action A. The only transition that builds a request from raw input, hence the only one that can fail on content. */
+/** アクション A。生の入力から申請を組み立てる唯一の遷移なので、内容で失敗しうる唯一の遷移でもある。 */
 export function create(dir: Directory, author: UserId, dep: DepartmentId, content: Content): Outcome {
   //@ verify
-  //@ contract A member of `dep` can create a Draft in `dep`; anybody else, or invalid content, is denied.
+  //@ contract `dep` のメンバーは `dep` に Draft を作成できる。それ以外の人、または不正な内容は拒否される。
   //@ ensures \result.kind === "Success" ==> \result.value.author === author && \result.value.department === dep
   //@ ensures \result.kind === "Success" ==> \result.value.status.kind === "Draft" && wellFormed(dir, \result.value)
   //@ ensures \result.kind === "Success" ==> validContent(content)
@@ -211,9 +210,9 @@ export function create(dir: Directory, author: UserId, dep: DepartmentId, conten
 }
 
 /**
- * Actions B..F are total functions guarded by preconditions. The permission *is* the
- * `requires`, so "approve a Draft" is not a runtime denial but a program that does not
- * verify. The postconditions state the frame: what changes and what does not.
+ * アクション B〜F は事前条件で守られた全域関数である。権限が `requires` そのものなので、
+ * 「Draft を承認する」は実行時の拒否ではなく、検証できないプログラムになる。事後条件は
+ * フレーム——何が変わり、何が変わらないか——を述べる。
  */
 export function edit(dir: Directory, actor: UserId, r: Request, content: Content): Request {
   //@ verify
@@ -256,18 +255,17 @@ export function returnToAuthor(dir: Directory, actor: UserId, r: Request): Reque
 }
 
 /**
- * The dynamic entry point. Any (request, command) pair coming from the outside world is
- * classified here and delegated to a preconditioned transition, so `step` is total. An actor
- * who cannot read learns nothing about the request, and a decided request answers before the
- * command is even looked at (P2).
+ * 動的な入口。外の世界から来る任意の (申請, コマンド) の組をここで分類し、事前条件つきの
+ * 遷移に委譲するので、`step` は全域である。閲覧できない実行者は申請について何も知らされず、
+ * 決裁済みの申請はコマンドを見る前に答えを返す（P2）。
  *
- * The postconditions are the one-step theorems of spec.md: P1 (a successful decision is by a
- * Manager of the target department), P2 (a decided request accepts nothing), identity is
- * immutable, and each command succeeds exactly under its access rule.
+ * 事後条件は、1 ステップについての spec.md の定理である: P1（成功した決裁は申請先部署の
+ * 上長による）、P2（決裁済みの申請は何も受け付けない）、申請の同一性は不変、そして各
+ * コマンドはちょうどその権限規則のもとで成功する。
  */
 export function step(dir: Directory, actor: UserId, r: Request, cmd: Command): Outcome {
   //@ verify
-  //@ contract Apply `cmd` to `r` on behalf of `actor`, or explain why it is denied.
+  //@ contract `actor` に代わって `cmd` を `r` に適用する。できない場合は拒否の理由を返す。
   //@ ensures \result.kind === "Success" ==> canRead(dir, actor, r)
   //@ ensures isTerminal(r.status) ==> \result.kind === "Failure"
   //@ ensures \result.kind === "Success" ==> \result.value.author === r.author && \result.value.department === r.department
@@ -299,7 +297,7 @@ export function step(dir: Directory, actor: UserId, r: Request, cmd: Command): O
   }
 }
 
-// === Traces ===
+// === トレース ===
 
 export interface Event {
   actor: UserId;
@@ -307,13 +305,14 @@ export interface Event {
 }
 
 /**
- * Apply a whole trace; denied commands leave the request untouched. The loop invariants lift
- * the one-step theorems of `step` to system invariants: identity is immutable and decided
- * requests are frozen (P2) along any trace -- of any length, over a directory of any size.
+ * トレース全体を適用する。拒否されたコマンドは申請に手を触れない。ループ不変条件が
+ * `step` の 1 ステップの定理をシステムの不変条件に持ち上げる: どんなトレースに沿っても
+ * 同一性は不変で、決裁済みの申請は凍結される（P2）——任意の長さのトレース、任意の
+ * 大きさの名簿について。
  */
 export function run(dir: Directory, r: Request, events: Event[]): Request {
   //@ verify
-  //@ contract Fold `step` over `events`, keeping the request where a command is denied.
+  //@ contract `events` にわたって `step` を畳み込む。コマンドが拒否されたところでは申請をそのまま保つ。
   //@ ensures \result.author === r.author && \result.department === r.department
   //@ ensures wellFormed(dir, r) ==> wellFormed(dir, \result)
   //@ ensures isTerminal(r.status) ==> \result === r
@@ -328,13 +327,13 @@ export function run(dir: Directory, r: Request, events: Event[]): Request {
   return current;
 }
 
-// === The mutable system (spec.md as a running service) ===
+// === 可変なシステム（spec.md を動くサービスとして） ===
 
 /**
- * The request store of a running service. The class invariant -- every stored request is
- * well-formed against the directory -- is stated as `requires` / `ensures` of each method.
- * P3 (no orphaned request) becomes a theorem about any store whose directory satisfies
- * `departmentsHaveManagers` (`WorkflowHasNoOrphanedRequests` in approval.dfy).
+ * 動くサービスの申請ストア。クラス不変条件——保存されているすべての申請は名簿に対して
+ * 整合している——は各メソッドの `requires` / `ensures` として述べる。P3（取り残された
+ * 申請がない）は、名簿が `departmentsHaveManagers` を満たすどんなストアについても
+ * 成り立つ定理になる（approval.dfy の `WorkflowHasNoOrphanedRequests`）。
  */
 export class Workflow {
   directory: Directory;
@@ -347,7 +346,7 @@ export class Workflow {
     this.nextId = 0;
   }
 
-  /** Action A on the store: a successfully created request is recorded under a fresh id. */
+  /** ストア上のアクション A: 作成に成功した申請は新しい id で記録される。 */
   open(author: UserId, dep: DepartmentId, content: Content): Outcome {
     //@ verify
     //@ requires forall(id, this.requests.has(id) ==> wellFormed(this.directory, this.requests.get(id)))
@@ -364,7 +363,7 @@ export class Workflow {
     return outcome;
   }
 
-  /** Actions B..F on the store: `step` decides, and only a success is written back. */
+  /** ストア上のアクション B〜F: `step` が判断し、成功したときだけ書き戻す。 */
   apply(actor: UserId, id: number, cmd: Command): Outcome {
     //@ verify
     //@ requires forall(k, this.requests.has(k) ==> wellFormed(this.directory, this.requests.get(k)))

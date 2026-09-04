@@ -411,14 +411,14 @@ class Workflow {
 }
 
 // ---------------------------------------------------------------------------
-// Proof additions (not generated from approval.ts): the theorems of ../spec.md
-// stated over the generated definitions. approval.ts states the one-step
-// facts as `ensures`; these lemmas name P1-P3 explicitly and lift them to
-// requests held by a `Workflow`.
+// 証明の追記（approval.ts から生成されたものではない）: ../spec.md の定理を、
+// 生成された定義の上で述べる。approval.ts は 1 ステップの事実を `ensures` として
+// 述べており、ここの補題は P1〜P3 に明示的に名前を付け、`Workflow` が保持する
+// 申請へ持ち上げる。
 // ---------------------------------------------------------------------------
 
-// P1: a successful decision is always taken by a Manager of the *target*
-// department. Being a Manager elsewhere gives no authority here.
+// P1: 成功した決裁は必ず *申請先* 部署の上長による。他の部署の上長であることは
+// ここでは何の権限も与えない。
 lemma NoAuthorityLeakAcrossDepartments(dir: Directory, actor: UserId, r: Request, cmd: Command, other: DepartmentId)
   requires cmd.Approve? || cmd.Reject? || cmd.Return?
   requires step(dir, actor, r, cmd).Success?
@@ -427,8 +427,8 @@ lemma NoAuthorityLeakAcrossDepartments(dir: Directory, actor: UserId, r: Request
 {
 }
 
-// spec.md 4 D: nothing forbids the author approving their own request when
-// the author is also a Manager of the target department.
+// spec.md 4 D: 申請者が申請先部署の上長でもあるとき、自分の申請を自分で承認する
+// ことは禁止されていない。
 lemma SelfApprovalIsPermitted(dir: Directory, author: UserId, r: Request)
   requires r.author == author && r.status.Pending?
   requires isManagerOf(dir, author, r.department)
@@ -436,8 +436,8 @@ lemma SelfApprovalIsPermitted(dir: Directory, author: UserId, r: Request)
 {
 }
 
-// P2: an Approved or Rejected request accepts no command at all, and stays
-// exactly as it is along any trace (the postcondition of `run`).
+// P2: Approved / Rejected の申請はいかなるコマンドも受け付けず、どんなトレースに
+// 沿ってもそのまま保たれる（`run` の事後条件）。
 lemma TerminalRequestsRejectEveryCommand(dir: Directory, actor: UserId, r: Request, cmd: Command)
   requires isTerminal(r.status)
   ensures step(dir, actor, r, cmd).Failure?
@@ -445,8 +445,8 @@ lemma TerminalRequestsRejectEveryCommand(dir: Directory, actor: UserId, r: Reque
 {
 }
 
-// P3: in a directory where every department has a Manager, every well-formed
-// Pending request has someone entitled to decide it ...
+// P3: すべての部署に上長がいる名簿では、整合した Pending の申請にはそれを決裁する
+// 権限を持つ人がいて……
 lemma EveryPendingRequestHasADecider(dir: Directory, r: Request)
   requires departmentsHaveManagers(dir)
   requires wellFormed(dir, r) && r.status.Pending?
@@ -458,7 +458,7 @@ lemma EveryPendingRequestHasADecider(dir: Directory, r: Request)
   assert canDecide(dir, m, r);
 }
 
-// ... and that person can actually bring it to a terminal state.
+// ……その人は実際に申請を終端状態へ持っていける。
 lemma PendingRequestsCanBeDecided(dir: Directory, r: Request)
   requires departmentsHaveManagers(dir)
   requires wellFormed(dir, r) && r.status.Pending?
@@ -470,9 +470,9 @@ lemma PendingRequestsCanBeDecided(dir: Directory, r: Request)
   assert step(dir, e.actor, r, e.command).Success? && isTerminal(step(dir, e.actor, r, e.command).value.status);
 }
 
-// P3 for a running service: the `requires`/`ensures` of `Workflow.open` and
-// `Workflow.apply` keep every stored request well formed, so no Pending
-// request in the store is ever orphaned.
+// 動くサービスに対する P3: `Workflow.open` と `Workflow.apply` の `requires` /
+// `ensures` が保存されたすべての申請を整合に保つので、ストア内の Pending の申請が
+// 取り残されることはない。
 lemma WorkflowHasNoOrphanedRequests(w: Workflow)
   requires departmentsHaveManagers(w.directory)
   requires forall id: int :: id in w.requests ==> wellFormed(w.directory, w.requests[id])
