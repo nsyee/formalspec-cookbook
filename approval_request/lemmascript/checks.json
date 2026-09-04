@@ -1,0 +1,38 @@
+{
+  "entry": "scenarios.ts",
+  "checks": [
+    {
+      "name": "check",
+      "kind": "check",
+      "files": ["approval.ts"],
+      "description": "approval.ts compiles to Dafny, approval.dfy is additions-only over the generated code, and it verifies (P1-P3 included)"
+    },
+    {
+      "name": "scenarios",
+      "kind": "run",
+      "files": ["scenarios.ts"],
+      "description": "the scenarios of spec.md run under Node.js on the very TypeScript that was verified"
+    },
+    {
+      "name": "negative-authority-leak",
+      "kind": "verify",
+      "files": ["negative/AuthorityLeak.dfy"],
+      "expect": "violation",
+      "description": "P1: a manager of another department must not be able to decide"
+    },
+    {
+      "name": "negative-directory-without-manager",
+      "kind": "verify",
+      "files": ["negative/DirectoryWithoutManager.dfy"],
+      "expect": "violation",
+      "description": "P3 needs departmentsHaveManagers as a premise, and a Draft cannot be approved"
+    },
+    {
+      "name": "negative-author-edits-pending",
+      "kind": "verify",
+      "files": ["negative/AuthorEditsPending.dfy"],
+      "expect": "violation",
+      "description": "U1: the author must not be able to edit a Pending request"
+    }
+  ]
+}
