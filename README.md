@@ -6,9 +6,9 @@
 
 ## 対応表（マトリクス）
 
-| お題 | 仕様 | Alloy | TLA+ | Quint | Cedar | Souther | Lean 4 | Dafny | LemmaScript |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | [✓](approval_request/alloy/) | [✓](approval_request/tla/) | [✓](approval_request/quint/) | [✓](approval_request/cedar/) | [✓](approval_request/souther/) | [✓](approval_request/lean/) | [✓](approval_request/dafny/) | [✓](approval_request/lemmascript/) |
+| お題 | 仕様 | Alloy | TLA+ | Quint | Cedar | Souther | Lean 4 | Dafny | LemmaScript | MDG |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 稟議申請システム (approval_request) | [spec.md](approval_request/spec.md) | [✓](approval_request/alloy/) | [✓](approval_request/tla/) | [✓](approval_request/quint/) | [✓](approval_request/cedar/) | [✓](approval_request/souther/) | [✓](approval_request/lean/) | [✓](approval_request/dafny/) | [✓](approval_request/lemmascript/) | [✓](approval_request/mdg/) |
 
 凡例: ✓ 実装済 / WIP 作業中 / - 未着手
 
@@ -27,7 +27,8 @@
 │   ├── souther/              # Souther 実行可能仕様（README.md + *.sou + コンパイル時に検査される *.examples.sou）
 │   ├── lean/                 # Lean 4 定理証明モデル（README.md + Lake プロジェクト: Approval/*.lean + 証明 + シナリオ再生 CLI）
 │   ├── dafny/                # Dafny 検証つきモデル（README.md + *.dfy + 失敗を期待する negative/*.dfy + 検査一覧 checks.json）
-│   └── lemmascript/          # LemmaScript モデル（README.md + 注釈つき TypeScript *.ts + 生成された *.dfy.gen と証明追記 *.dfy + negative/*.dfy + 検査一覧 checks.json）
+│   ├── lemmascript/          # LemmaScript モデル（README.md + 注釈つき TypeScript *.ts + 生成された *.dfy.gen と証明追記 *.dfy + negative/*.dfy + 検査一覧 checks.json）
+│   └── mdg/                  # Markdown with Gherkin 仕様（README.md + *.feature.md + 実行可能モデル model.ts + steps/ + support/ + 変異体 negative/*.ts + 検査一覧 checks.json）
 └── scripts/                  # 検証ドライバなどの自動化スクリプト
 ```
 
@@ -44,6 +45,7 @@ $ make verify-souther # Souther（fmt・compile・examples --strict による網
 $ make verify-lean    # Lean 4（lake build による証明検査・#print axioms 監査・シナリオ再生）のモデルだけ
 $ make verify-dafny   # Dafny（format・verify による演繹的証明・test・run）のモデルだけ
 $ make verify-lemmascript # LemmaScript（lsc check による Dafny へのコンパイルと検証・Node.js でのシナリオ実行）のモデルだけ
+$ make verify-mdg     # Markdown with Gherkin（tsc による型検査・cucumber-js の dry-run とシナリオ実行・変異体に対する失敗期待検査）の仕様だけ
 ```
 
 必要なのは Java 17 以降と Python 3.8 以降のみで、モデル検査器の本体（Alloy、TLA+ Tools）は初回実行時に `.tools/` へ自動ダウンロードされる。
@@ -53,7 +55,8 @@ Souther は Java 25 を必要とし、`PATH` / `JAVA_HOME` の Java が古い場
 Lean 4 は追加要件なし。`lake` が `PATH` / `~/.elan` に無ければ elan が `.tools/elan/` へインストールされ、`lean-toolchain` に固定された Lean が elan により取得される（Mathlib は使わない）。
 Dafny は追加要件がなく、Z3 を同梱した自己完結リリースが `.tools/dafny-4.11.0/` へダウンロードされ、コンパイルは Python バックエンドを使う（.NET SDK 不要）。
 LemmaScript は追加で Node.js 22.18 以降（npm 込み）を必要とし、LemmaScript CLI（`lsc` 0.6.1）が npm で `.tools/lemmascript/` へインストールされ、検証器には上記の Dafny を共用する。
-個別のモデルだけを回す方法や GUI の起動方法は各言語ディレクトリの README を参照（[Alloy](approval_request/alloy/README.md) / [TLA+](approval_request/tla/README.md) / [Quint](approval_request/quint/README.md) / [Cedar](approval_request/cedar/README.md) / [Souther](approval_request/souther/README.md) / [Lean 4](approval_request/lean/README.md) / [Dafny](approval_request/dafny/README.md) / [LemmaScript](approval_request/lemmascript/README.md)）。
+MDG は追加で Node.js 22.18 以降（npm 込み）を必要とし、Cucumber.js と TypeScript コンパイラが `npm ci` で `approval_request/mdg/node_modules/` へ取得される。
+個別のモデルだけを回す方法や GUI の起動方法は各言語ディレクトリの README を参照（[Alloy](approval_request/alloy/README.md) / [TLA+](approval_request/tla/README.md) / [Quint](approval_request/quint/README.md) / [Cedar](approval_request/cedar/README.md) / [Souther](approval_request/souther/README.md) / [Lean 4](approval_request/lean/README.md) / [Dafny](approval_request/dafny/README.md) / [LemmaScript](approval_request/lemmascript/README.md) / [MDG](approval_request/mdg/README.md)）。
 検証はプルリクエストごとに GitHub Actions でも実行される（[.github/workflows/verify.yml](.github/workflows/verify.yml)）。
 
 ## お題の追加
