@@ -100,7 +100,7 @@ def apalache_jar() -> Path:
     if APALACHE_JAR.exists():
         return APALACHE_JAR
     if shutil.which("java") is None:
-        fail("java 17 or later is required to run Apalache")
+        fail("java 21 or later is required to run Apalache")
     TOOLS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"downloading Apalache {APALACHE_VERSION} ...", file=sys.stderr)
     archive = TOOLS_DIR / f"apalache-{APALACHE_VERSION}.tgz"

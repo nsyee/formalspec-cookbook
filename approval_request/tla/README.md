@@ -3,7 +3,7 @@
 - 仕様本体: [`Approval.tla`](Approval.tla)
 - 検証用モジュール: [`MCApproval.tla`](MCApproval.tla)（TLC モデルの共通モジュール）, [`MCSymmetry.tla`](MCSymmetry.tla)（対称性）, [`MCScenarios.tla`](MCScenarios.tla)（履歴変数を足したシナリオ探索）
 - 対象仕様: [`../spec.md`](../spec.md)
-- ツール: TLA+ Tools 1.7.4（TLC / SANY）と Apalache 0.62.2（Snowcat 型検査）。Java 17 以降と Python 3.8 以降があれば、初回実行時に `.tools/` へ自動ダウンロードされる（`.gitignore` 済み）。
+- ツール: TLA+ Tools 1.7.4（TLC / SANY）と Apalache 0.62.2（Snowcat 型検査）。Java 21 以降（TLC だけなら 11 以降）と Python 3.8 以降があれば、初回実行時に `.tools/` へ自動ダウンロードされる（`.gitignore` 済み）。
 
 ## CLI での実行
 
