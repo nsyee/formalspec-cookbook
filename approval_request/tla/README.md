@@ -1,19 +1,24 @@
 # 稟議申請システム — TLA+ モデル
 
 - 仕様本体: [`Approval.tla`](Approval.tla)
-- 検証用モジュール: [`MCApproval.tla`](MCApproval.tla)（スコープ・対称性）, [`MCScenarios.tla`](MCScenarios.tla)（履歴変数を足したシナリオ探索）
+- 検証用モジュール: [`MCApproval.tla`](MCApproval.tla)（TLC モデルの共通モジュール）, [`MCSymmetry.tla`](MCSymmetry.tla)（対称性）, [`MCScenarios.tla`](MCScenarios.tla)（履歴変数を足したシナリオ探索）
 - 対象仕様: [`../spec.md`](../spec.md)
-- ツール: TLA+ Tools 1.7.4（TLC / SANY）。Java 11 以降と Python 3.8 以降があれば、初回実行時に `.tools/` へ自動ダウンロードされる（`.gitignore` 済み）。
+- ツール: TLA+ Tools 1.7.4（TLC / SANY）と Apalache 0.62.2（Snowcat 型検査）。Java 17 以降と Python 3.8 以降があれば、初回実行時に `.tools/` へ自動ダウンロードされる（`.gitignore` 済み）。
 
 ## CLI での実行
 
 ```console
 $ make verify-tla                              # リポジトリ内の全 TLC モデルを検証
 $ ./scripts/tla.py verify approval_request/tla
+ok   Approval     well typed (3s)
+ok   MCApproval   well typed (1s)
+ok   MCScenarios  well typed (1s)
+skip MCSymmetry   typecheck: skip
+
 ok   MCActions                   32,977 distinct states (2s)
 ok   MCLiveness                  1,559 distinct states (1s)
 ok   MCLivenessNoFairness        Temporal properties were violated (1s)
-ok   MCSafety                    69,502 distinct states (2s)
+ok   MCSafety                    69,551 distinct states (2s)
 ok   MCScenarioCrossAffiliation  Invariant CrossAffiliatedApprovalIsImpossible is violated (1s)
 ok   MCScenarioRoundTrip         Invariant RoundTripIsImpossible is violated (3s)
 ok   MCScenarioSelfApproval      Invariant SelfApprovalIsImpossible is violated (1s)
@@ -27,8 +32,46 @@ ok   MCScenarioSelfApproval      Invariant SelfApprovalIsImpossible is violated 
 $ ./scripts/tla.py models approval_request/tla                            # モデル一覧
 $ ./scripts/tla.py verify approval_request/tla --only MCSafety            # 1 モデルだけ検証
 $ ./scripts/tla.py trace approval_request/tla/MCScenarioRoundTrip.cfg     # TLC の出力（反例トレース）を全文表示
+$ ./scripts/tla.py typecheck approval_request/tla                         # Apalache (Snowcat) の型検査だけ行う
+$ ./scripts/tla.py verify approval_request/tla --skip-typecheck           # 型検査を飛ばして TLC だけ実行
 $ ./scripts/tla.py parse approval_request/tla/Approval.tla                # SANY で構文・意味検査だけ行う
 ```
+
+## Apalache (Snowcat) による型検査
+
+`verify` は TLC を実行する前に、ディレクトリ内の全モジュールを [Apalache](https://apalache-mc.org/) の型検査器
+[Snowcat](https://apalache-mc.org/docs/tutorials/snowcat-tutorial.html) に通す。TLA+ は無型の言語だが、定数と変数に
+`\* @type: ...;` コメントで型を与えると、レコードのフィールド名の誤りや集合と要素の混同のような間違いを、
+モデル検査を回す前に（数秒で）検出できる。型注釈は TLC には単なるコメントなので、同じモジュールを両方の検査器で使える。
+
+```tla
+(* @typeAlias: request = { author: USER, target: DEPT, status: Str, revision: REV };
+   @typeAlias: event = { kind: Str, by: USER, req: REQ }; *)
+Approval_typedefs == TRUE
+
+CONSTANTS
+    \* @type: Set(USER);
+    User,
+    ...
+    \* @type: $request;
+    Nil
+
+VARIABLES
+    \* @type: USER -> (DEPT -> Str);
+    role,
+    \* @type: REQ -> $request;
+    req,
+    \* @type: $event;
+    event
+```
+
+型付けのためにモデルで工夫した点:
+
+- **未解釈型**: `User` / `Department` / `Request` / `Revision` の要素は `USER` / `DEPT` / `REQ` / `REV` という未解釈型にする。TLC では `.cfg` の模型値がその役割を担う。
+- **`Nil` は申請レコードと同じ型**: Snowcat では `RequestRecord \cup {Nil}` の要素が同じ型でなければならない。`req[r]` のフィールドは常に `req[r] # Nil` の下でしか読まないので、`Nil` の中身は参照されない。
+- **`event` のレコードはフィールドを揃える**: Snowcat のレコード型はフィールドの集合が固定なので、`[kind |-> "Init"]`（`by` / `req` なし）とアクションのイベントを同じ変数に入れられない。初期イベント `InitEvent` は `by` / `req` に `CHOOSE` で任意に選んだ値を持たせる。
+- **タプルの集合には注釈が要る**: `StatusTransition` のような順序対の集合は `\* @type: Set(<<Str, Str>>);` を付けないと、タプルと列（`Seq`）のどちらかを Snowcat が決められない。
+- **対称性は別モジュール**: `Permutations(User) \cup Permutations(Department)` は型の異なる集合の合併なので型付けできない。TLC しか使わない `Symmetry` は [`MCSymmetry.tla`](MCSymmetry.tla) に分離し、先頭の `\* typecheck: skip` で型検査の対象外にする。
 
 ## モデル（`.cfg`）の構成
 
@@ -42,7 +85,7 @@ TLA+ では「仕様」と「検査するモデル（スコープ・検査対象
 
 | モデル | 仕様式 | 検査するもの | 期待 |
 | --- | --- | --- | --- |
-| [`MCSafety`](MCSafety.cfg) | `Spec` | 不変条件（P1 / P3 / R2 / U2 / 型） | エラーなし |
+| [`MCSafety`](MCSafety.cfg) | `Spec`（`MCSymmetry` 経由で対称性を使う） | 不変条件（P1 / P3 / R2 / U2 / 型） | エラーなし |
 | [`MCActions`](MCActions.cfg) | `Spec` | アクション性質（状態遷移図・P2・決裁者） | エラーなし |
 | [`MCLiveness`](MCLiveness.cfg) | `FairSpec` | 活性（`Pending` は必ず決裁される） | エラーなし |
 | [`MCLivenessNoFairness`](MCLivenessNoFairness.cfg) | `Spec` | 進行仮定を外すと活性が破れること | **反例** |
@@ -79,7 +122,7 @@ TLA+/TLC には `run` に当たる機能がないので、**シナリオの否�
   - 遷移の制約は `[][A]_vars` 形のアクション性質。許される状態遷移を **順序対の集合** `StatusTransition` として与え、それ以外の変化が起きないことを主張する（spec.md §2 の図がほぼそのまま式になる）。
   - 活性は `~>`（leads-to）。上長が決裁を先延ばしにする振る舞いも `Spec` は許すので、`FairSpec` で弱公平性 `WF_vars(\E u, s : Decide(u, r, s))` を仮定して検証する。仮定が本当に必要なことは `MCLivenessNoFairness`（反例を期待するモデル）で示す。
 - **初期状態の非決定性で構造を全探索**: 役職の割り当ては時間で変化しないが、定数にしてしまうと 1 通りしか検査できない。`Init` で `role \in [User -> Affiliation]` と非決定的に選び、各アクションで `UNCHANGED role` とすることで、**すべての兼務パターン**を探索する（P1 は兼務パターンに依存する性質なので、ここが本質）。
-- **対称性による状態空間の削減**: ユーザー・部署・申請・内容は互換な模型値なので `SYMMETRY Permutations(...)` で商をとる。不変条件の検査では健全だが活性では使えないため、`.cfg` を分けている。
+- **対称性による状態空間の削減**: ユーザー・部署・申請・内容は互換な模型値なので `SYMMETRY Permutations(...)` で商をとる（`MCSymmetry.tla`）。不変条件の検査では健全だが活性では使えないため、`.cfg` を分けている。
 - **補助変数の追加はモジュールを分けて行う**: シナリオ（複数遷移にまたがる到達可能性）の確認には履歴が必要なので、`MCScenarios.tla` で `log`（アクションの列）を追加した `SSpec` を定義する。仕様本体は触らない。`log` を隠せば `SSpec` は `Spec` と同じ振る舞いを表す、という TLA+ の定石。
 - **`CONSTRAINT` で状態空間を有界化**: `log` を足すと状態空間が無限になるので、`LogIsBounded == Len(log) =< MaxLog` を状態制約として与える（`MaxLog` は `.cfg` のパラメータ）。
 - **`RECURSIVE` による列の走査**: 「この順にアクションが起きた」を `HappenedInOrder(<<"Submit", "Return", "Edit", "Submit", "Approve">>, r, 1)` と書けるよう、列に対する再帰演算子を定義する。TLA+ には過去時相演算子がないため、履歴を明示的に持って一階の論理で書くのが定石。
@@ -102,7 +145,7 @@ TLA+/TLC には `run` に当たる機能がないので、**シナリオの否�
 
 ## 検証結果（既定スコープ）
 
-7 モデルすべてが期待どおり（全体で 10 秒程度）。既定スコープはユーザー 3・部署 2・申請 1〜2・内容 2 で、
+3 モジュールが型検査を通り、7 モデルすべてが期待どおり（全体で 15 秒程度）。既定スコープはユーザー 3・部署 2・申請 1〜2・内容 2 で、
 `MCSafety` は対称性による商をとって約 7 万状態を全探索する。
 
 有界検証であるため、定数集合を大きくすれば新たな反例が出る可能性は残る。P1 は「部署 2 つ・ユーザー 3 人」で
