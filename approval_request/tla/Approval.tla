@@ -14,14 +14,32 @@
 (*     して書き、Next でまとめる。仕様全体は Init /\ [][Next]_vars の形。      *)
 (*   - 直前に起きたアクションを履歴変数 event に残す。エラートレースが読みやす *)
 (*     くなるうえ、「誰の操作で状態が変わったか」をアクション性質として書ける。  *)
+(*   - 定数と変数には Apalache (Snowcat) 用の型注釈 `@type` を付ける。TLC は   *)
+(*     コメントとして無視するので、両方の検査器で同じモジュールを使える。       *)
 (***************************************************************************)
 EXTENDS FiniteSets
 
+(***************************************************************************)
+(* Snowcat 用の型別名。USER / DEPT / REQ / REV は未解釈型で、TLC では .cfg の *)
+(* 模型値がその役割を担う。Nil は作成済み申請と同じレコード型にしておく。     *)
+(* `RequestRecord \cup {Nil}` の型を揃えるためで、req[r] のフィールドは常に    *)
+(* req[r] # Nil の下でしか読まないので Nil の中身が参照されることはない。      *)
+(*                                                                         *)
+(* @typeAlias: request = { author: USER, target: DEPT, status: Str, revision: REV };
+   @typeAlias: event = { kind: Str, by: USER, req: REQ };                   *)
+(***************************************************************************)
+Approval_typedefs == TRUE
+
 CONSTANTS
+    \* @type: Set(USER);
     User,        \* ユーザーの集合
+    \* @type: Set(DEPT);
     Department,  \* 部署の集合
+    \* @type: Set(REQ);
     Request,     \* 稟議申請の識別子の集合（静的なプール）
+    \* @type: Set(REV);
     Revision,    \* 申請の内容。中身は問わない不透明な値（編集は値の差し替え）
+    \* @type: $request;
     Nil          \* 「その申請はまだ存在しない」ことを表す値
 
 Role == {"Member", "Manager"}
@@ -47,15 +65,22 @@ Affiliation == UNION { [S -> Role] : S \in (SUBSET Department \ {{}}) }
 ASSUME /\ User # {} /\ Department # {} /\ Request # {} /\ Revision # {}
        /\ Nil \notin RequestRecord
 
-\* 履歴変数 event が取り得る値。初期状態だけは実行者を持たない。
-Event ==
-    [kind: {"Init"}]
-        \cup [kind: {"Create", "Edit", "Submit", "Approve", "Reject", "Return"},
-              by: User, req: Request]
+\* 履歴変数 event が取り得る値。初期状態は実行者と対象を持たないので、
+\* by / req には（型を揃えるため）任意に選んだ値を入れる。
+EventKind == {"Init", "Create", "Edit", "Submit", "Approve", "Reject", "Return"}
+
+Event == [kind: EventKind, by: User, req: Request]
+
+InitEvent == [kind |-> "Init",
+              by |-> CHOOSE u \in User : TRUE,
+              req |-> CHOOSE r \in Request : TRUE]
 
 VARIABLES
+    \* @type: USER -> (DEPT -> Str);
     role,   \* [User -> Affiliation]  静的な構造。Init で非決定的に選ぶ
+    \* @type: REQ -> $request;
     req,    \* [Request -> RequestRecord \cup {Nil}]
+    \* @type: $event;
     event   \* 直前に起きたアクション（履歴変数）
 
 vars == <<role, req, event>>
@@ -188,7 +213,7 @@ Init ==
     /\ role \in [User -> Affiliation]   \* 所属と役職のあらゆる組み合わせを探索する
     /\ EveryDepartmentIsManaged
     /\ req = [r \in Request |-> Nil]
-    /\ event = [kind |-> "Init"]
+    /\ event = InitEvent
 
 Spec == Init /\ [][Next]_vars
 
@@ -251,6 +276,7 @@ TerminalRequestsAreFrozen ==
 
 \* spec.md §2 の状態遷移図。許される遷移を関係（順序対の集合）として与え、
 \* それ以外の状態変化が起きないことをアクション性質として主張する。
+\* @type: Set(<<Str, Str>>);
 StatusTransition ==
     {<<"Absent", "Draft">>, <<"Draft", "Pending">>, <<"Returned", "Pending">>,
      <<"Pending", "Approved">>, <<"Pending", "Rejected">>, <<"Pending", "Returned">>}
