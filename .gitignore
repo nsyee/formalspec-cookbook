@@ -7,3 +7,5 @@ _apalache-out/
 *-py/
 tmp/
 .lake/
+node_modules/
+*/mdg/report/

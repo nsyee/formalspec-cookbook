@@ -1,0 +1,9 @@
+{
+  "default": {
+    "language": "ja",
+    "paths": ["*.feature.md"],
+    "import": ["support/*.ts", "steps/*.ts"],
+    "format": ["progress"],
+    "strict": true
+  }
+}

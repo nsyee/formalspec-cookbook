@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "name": "typecheck",
+      "kind": "tsc",
+      "description": "model.ts, the step definitions and the mutants type-check (Node.js only strips the annotations)"
+    },
+    {
+      "name": "dry-run",
+      "kind": "dry-run",
+      "description": "approval.feature.md parses as Gherkin and every step of every scenario has exactly one step definition"
+    },
+    {
+      "name": "scenarios",
+      "kind": "run",
+      "description": "all scenarios of approval.feature.md pass against model.ts"
+    },
+    {
+      "name": "negative-authority-leak",
+      "kind": "run",
+      "tags": "@P1",
+      "model": "negative/authority-leak.ts",
+      "expect": "violation",
+      "description": "P1: a model in which a manager of any department may decide fails the @P1 scenarios"
+    },
+    {
+      "name": "negative-terminal-thaw",
+      "kind": "run",
+      "tags": "@P2",
+      "model": "negative/terminal-thaw.ts",
+      "expect": "violation",
+      "description": "P2: a model in which Approved / Rejected requests accept commands fails the @P2 scenarios"
+    },
+    {
+      "name": "negative-role-per-user",
+      "kind": "run",
+      "tags": "@P1 or @U2",
+      "model": "negative/role-per-user.ts",
+      "expect": "violation",
+      "description": "spec.md section 6: a model that attaches the role to the user instead of the (user, department) pair fails the @P1 and @U2 scenarios"
+    }
+  ]
+}

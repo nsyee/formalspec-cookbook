@@ -14,8 +14,10 @@ DAFNY := ./scripts/dafny.py
 DAFNY_DIRS := $(wildcard */dafny)
 LEMMASCRIPT := ./scripts/lemmascript.py
 LEMMASCRIPT_DIRS := $(wildcard */lemmascript)
+MDG := ./scripts/mdg.py
+MDG_DIRS := $(wildcard */mdg)
 
-.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny verify-lemmascript commands models checks clean
+.PHONY: help verify verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny verify-lemmascript verify-mdg commands models checks clean
 
 help:
 	@echo "make verify         # run every model checker in this repository"
@@ -27,9 +29,10 @@ help:
 	@echo "make verify-lean    # check the Lean 4 models and proofs ($(LEAN_DIRS))"
 	@echo "make verify-dafny   # run the Dafny models ($(DAFNY_DIRS))"
 	@echo "make verify-lemmascript # compile the LemmaScript models to Dafny and verify ($(LEMMASCRIPT_DIRS))"
+	@echo "make verify-mdg     # run the Markdown with Gherkin specifications with Cucumber ($(MDG_DIRS))"
 	@echo "make commands       # list the commands of every Alloy model"
 	@echo "make models         # list the TLC models"
-	@echo "make checks         # list the Quint, Cedar, Souther, Lean, Dafny and LemmaScript checks"
+	@echo "make checks         # list the Quint, Cedar, Souther, Lean, Dafny, LemmaScript and MDG checks"
 	@echo "make clean          # remove downloaded tools"
 	@echo
 	@echo "single model: $(ALLOY) verify approval_request/alloy/approval.als"
@@ -56,8 +59,12 @@ help:
 	@echo "LemmaScript verification error: $(LEMMASCRIPT) trace approval_request/lemmascript --only negative-authority-leak"
 	@echo "LemmaScript scenarios under Node.js: $(LEMMASCRIPT) run approval_request/lemmascript"
 	@echo "LemmaScript regen after editing the .ts: $(LEMMASCRIPT) lsc -- regen --backend=dafny approval_request/lemmascript/approval.ts"
+	@echo "single MDG check: $(MDG) verify approval_request/mdg --only scenarios"
+	@echo "MDG scenarios by tag, step by step: $(MDG) run approval_request/mdg --tags '@P1 or @P2'"
+	@echo "MDG scenarios against a mutant: $(MDG) run approval_request/mdg --tags @P1 --model negative/authority-leak.ts"
+	@echo "MDG HTML report: $(MDG) report approval_request/mdg"
 
-verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny verify-lemmascript
+verify: verify-alloy verify-tla verify-quint verify-cedar verify-souther verify-lean verify-dafny verify-lemmascript verify-mdg
 
 verify-alloy:
 	@set -e; for model in $(ALLOY_MODELS); do \
@@ -107,6 +114,12 @@ verify-lemmascript:
 		$(LEMMASCRIPT) verify $$dir; \
 	done
 
+verify-mdg:
+	@set -e; for dir in $(MDG_DIRS); do \
+		echo "== $$dir"; \
+		$(MDG) verify $$dir; \
+	done
+
 commands:
 	@set -e; for model in $(ALLOY_MODELS); do \
 		echo "== $$model"; \
@@ -144,6 +157,10 @@ checks:
 		echo "== $$dir"; \
 		$(LEMMASCRIPT) checks $$dir; \
 	done
+	@set -e; for dir in $(MDG_DIRS); do \
+		echo "== $$dir"; \
+		$(MDG) checks $$dir; \
+	done
 
 clean:
-	rm -rf .tools
+	rm -rf .tools */mdg/node_modules */mdg/report
