@@ -38,7 +38,7 @@
 $ make help      # 使えるターゲットの一覧
 $ make verify    # 全モデルの check / run を実行して結果を集計
 $ make verify-alloy   # Alloy 6 のモデルだけ
-$ make verify-tla     # TLA+（TLC）のモデルだけ
+$ make verify-tla     # TLA+（Apalache/Snowcat による型検査・TLC によるモデル検査）のモデルだけ
 $ make verify-quint   # Quint（シナリオテスト・シミュレーション・Apalache/TLC）のモデルだけ
 $ make verify-cedar   # Cedar（validate・run-tests・SymCC による記号的検証）のモデルだけ
 $ make verify-souther # Souther（fmt・compile・examples --strict による網羅性つき例検査）のモデルだけ
@@ -48,7 +48,7 @@ $ make verify-lemmascript # LemmaScript（lsc check による Dafny へのコン
 $ make verify-mdg     # Markdown with Gherkin（tsc による型検査・cucumber-js の dry-run とシナリオ実行・変異体に対する失敗期待検査）の仕様だけ
 ```
 
-必要なのは Java 17 以降と Python 3.8 以降のみで、モデル検査器の本体（Alloy、TLA+ Tools）は初回実行時に `.tools/` へ自動ダウンロードされる。
+必要なのは Java 17 以降（TLA+ の Apalache 型検査は Java 21 以降）と Python 3.8 以降のみで、モデル検査器の本体（Alloy、TLA+ Tools、Apalache）は初回実行時に `.tools/` へ自動ダウンロードされる。
 Quint は追加で Node.js 18 以降を必要とし、Quint CLI が `.tools/` に、Apalache と TLC が Quint 自身によって `~/.quint/` へ取得される。
 Cedar は追加で Rust 1.89 以降（cargo）を必要とし、Cedar CLI が `.tools/` にビルドされ、SMT ソルバー cvc5 が `.tools/` へダウンロードされる。
 Souther は Java 25 を必要とし、`PATH` / `JAVA_HOME` の Java が古い場合は Temurin JDK 25 が `.tools/jdk-25/` へ、Souther CLI（自己実行 jar）は `PATH` 上の `souther` が 0.1.0 ならそれを使い、そうでなければ 0.1.0 が `.tools/souther/` へダウンロードされる。

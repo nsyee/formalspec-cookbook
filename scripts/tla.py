@@ -3,10 +3,12 @@
 
 Subcommands:
 
-    verify <path>... [--only NAME]   run the TLC models and print a summary
+    verify <path>... [--only NAME]   typecheck the modules, run the TLC models
+                                     and print a summary
+    typecheck <path>...              typecheck the modules with Apalache (Snowcat)
     models <path>...                 list the models found under a path
     trace  <model.cfg>               run one model and print the full TLC output
-    parse  <module.tla>              parse/typecheck a module with SANY
+    parse  <module.tla>              parse a module with SANY
 
 A "model" is a TLC configuration file (`*.cfg`). Each configuration starts with
 directives that say which module it belongs to and what the expected outcome is:
@@ -21,7 +23,16 @@ counterexample it produces is the witnessing behaviour. `verify` therefore exits
 non-zero both when a property is violated unexpectedly and when an expected
 counterexample fails to show up, which makes it usable as a CI gate.
 
-The TLA+ tools jar is downloaded on first use into `.tools/`.
+Before running TLC, `verify` typechecks every module (`*.tla`) found next to
+the models with Apalache's Snowcat type checker, which requires `@type`
+annotations on constants and variables. A module that cannot be typed (e.g.
+because it uses TLC-only constructs such as `Permutations`) opts out with a
+header line:
+
+    \\* typecheck: skip
+
+The TLA+ tools jar and the Apalache distribution are downloaded on first use
+into `.tools/`.
 """
 
 from __future__ import annotations
@@ -32,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.request
@@ -45,8 +57,17 @@ TLA_URL = (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TOOLS_DIR = Path(os.environ.get("TLA_TOOLS_DIR", REPO_ROOT / ".tools"))
 TLA_JAR = TOOLS_DIR / f"tla2tools-{TLA_VERSION}.jar"
+APALACHE_VERSION = os.environ.get("APALACHE_VERSION", "0.62.2")
+APALACHE_URL = (
+    "https://github.com/apalache-mc/apalache/releases/download/"
+    f"v{APALACHE_VERSION}/apalache-{APALACHE_VERSION}.tgz"
+)
+APALACHE_DIR = TOOLS_DIR / f"apalache-{APALACHE_VERSION}"
+APALACHE_JAR = APALACHE_DIR / "lib" / "apalache.jar"
 
 DIRECTIVE = re.compile(r"^\\\*\s*(module|expect|name)\s*:\s*(\S+)\s*$")
+SKIP_TYPECHECK = re.compile(r"^\\\*\s*typecheck\s*:\s*skip\s*$", re.M)
+TYPE_ERROR = re.compile(r"^(\[[^\]]+\]: .*?|Typing input error: .*?)\s+E@", re.M)
 STATES = re.compile(r"^(\d+) states generated, (\d+) distinct states found", re.M)
 VIOLATION = re.compile(
     r"^Error: (?:Invariant|Action property|Temporal properties|Property|Deadlock|"
@@ -73,6 +94,30 @@ def tla_jar() -> Path:
         shutil.copyfileobj(response, out)
     tmp.rename(TLA_JAR)
     return TLA_JAR
+
+
+def apalache_jar() -> Path:
+    if APALACHE_JAR.exists():
+        return APALACHE_JAR
+    if shutil.which("java") is None:
+        fail("java 21 or later is required to run Apalache")
+    TOOLS_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"downloading Apalache {APALACHE_VERSION} ...", file=sys.stderr)
+    archive = TOOLS_DIR / f"apalache-{APALACHE_VERSION}.tgz"
+    tmp = archive.with_suffix(".part")
+    with urllib.request.urlopen(APALACHE_URL) as response, tmp.open("wb") as out:
+        shutil.copyfileobj(response, out)
+    tmp.rename(archive)
+    # The archive unpacks into `apalache-<version>/`, i.e. APALACHE_DIR.
+    with tarfile.open(archive) as tar:
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(TOOLS_DIR, filter="data")
+        else:
+            tar.extractall(TOOLS_DIR)
+    archive.unlink()
+    if not APALACHE_JAR.exists():
+        fail(f"{APALACHE_URL} did not contain {APALACHE_JAR.relative_to(TOOLS_DIR)}")
+    return APALACHE_JAR
 
 
 class Model:
@@ -121,6 +166,66 @@ def discover(paths: list[Path]) -> list[Model]:
 def run_java(args: list[str], **kwargs: object) -> subprocess.CompletedProcess:
     java = ["java", "-XX:+UseParallelGC", "-cp", str(tla_jar())]
     return subprocess.run(java + args, check=False, **kwargs)  # noqa: S603
+
+
+def run_apalache(args: list[str], cwd: Path, **kwargs: object) -> subprocess.CompletedProcess:
+    with tempfile.TemporaryDirectory() as outdir:
+        return subprocess.run(  # noqa: S603
+            ["java", "-jar", str(apalache_jar()), f"--out-dir={outdir}", *args],
+            check=False,
+            cwd=cwd,
+            **kwargs,
+        )
+
+
+def discover_modules(paths: list[Path]) -> list[Path]:
+    modules: list[Path] = []
+    for path in paths:
+        if path.is_dir():
+            modules.extend(sorted(path.rglob("*.tla")))
+        elif path.suffix == ".tla":
+            modules.append(path)
+        elif path.suffix == ".cfg":
+            modules.extend(sorted(path.parent.glob("*.tla")))
+        else:
+            fail(f"not a TLA+ module, TLC configuration or directory: {path}")
+    return sorted(set(modules), key=str)
+
+
+def typecheck(paths: list[Path]) -> bool:
+    """Run Snowcat on every module under `paths`; True when all of them type."""
+    modules = discover_modules(paths)
+    if not modules:
+        fail(f"no TLA+ module found under {', '.join(map(str, paths))}")
+    width = max(len(module.stem) for module in modules)
+    ok = True
+    for module in modules:
+        if SKIP_TYPECHECK.search(module.read_text()):
+            print(f"skip {module.stem:<{width}}  typecheck: skip")
+            continue
+        started = time.monotonic()
+        result = run_apalache(
+            ["typecheck", module.name],
+            cwd=module.parent,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        output = result.stdout or ""
+        elapsed = time.monotonic() - started
+        if result.returncode == 0 and "Type checker [OK]" in output:
+            print(f"ok   {module.stem:<{width}}  well typed ({elapsed:.0f}s)")
+            continue
+        ok = False
+        errors = [m.group(1) for m in TYPE_ERROR.finditer(output)]
+        detail = errors[0] if errors else "APALACHE FAILED"
+        print(f"FAIL {module.stem:<{width}}  {detail} ({elapsed:.0f}s)")
+        if errors:
+            for error in errors[1:]:
+                print(f"     {error}", file=sys.stderr)
+        else:
+            print(output.strip()[-2000:], file=sys.stderr)
+    return ok
 
 
 def run_tlc(model: Model, extra: list[str], **kwargs: object) -> subprocess.CompletedProcess:
@@ -173,10 +278,20 @@ def cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_typecheck(args: argparse.Namespace) -> int:
+    return 0 if typecheck(args.paths) else 1
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     models = [m for m in discover(args.paths) if args.only in (None, m.name)]
     if not models:
         fail(f"no model matched {args.only!r} under {', '.join(map(str, args.paths))}")
+
+    if not args.skip_typecheck:
+        if not typecheck(args.paths):
+            print("type errors found; fix them or rerun with --skip-typecheck", file=sys.stderr)
+            return 1
+        print()
 
     results = []
     width = max(len(model.name) for model in models)
@@ -225,7 +340,14 @@ def main() -> int:
     verify = sub.add_parser("verify", help="run the models and summarize the results")
     verify.add_argument("paths", type=Path, nargs="+")
     verify.add_argument("--only", help="name of the single model to run")
+    verify.add_argument(
+        "--skip-typecheck", action="store_true", help="do not run the Apalache type checker first"
+    )
     verify.set_defaults(func=cmd_verify)
+
+    tc = sub.add_parser("typecheck", help="typecheck the modules with Apalache (Snowcat)")
+    tc.add_argument("paths", type=Path, nargs="+")
+    tc.set_defaults(func=cmd_typecheck)
 
     models = sub.add_parser("models", help="list the models found under a path")
     models.add_argument("paths", type=Path, nargs="+")

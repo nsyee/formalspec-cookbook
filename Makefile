@@ -22,7 +22,7 @@ MDG_DIRS := $(wildcard */mdg)
 help:
 	@echo "make verify         # run every model checker in this repository"
 	@echo "make verify-alloy   # run the Alloy 6 models ($(ALLOY_MODELS))"
-	@echo "make verify-tla     # run the TLA+ models with TLC ($(TLA_DIRS))"
+	@echo "make verify-tla     # typecheck the TLA+ modules with Apalache and run the models with TLC ($(TLA_DIRS))"
 	@echo "make verify-quint   # run the Quint models ($(QUINT_DIRS))"
 	@echo "make verify-cedar   # run the Cedar models ($(CEDAR_DIRS))"
 	@echo "make verify-souther # run the Souther models ($(SOUTHER_DIRS))"
@@ -39,6 +39,7 @@ help:
 	@echo "single command: $(ALLOY) trace approval_request/alloy/approval.als selfApprovalIsAllowed"
 	@echo "single TLC model: $(TLA) verify approval_request/tla --only MCSafety"
 	@echo "TLC counterexample: $(TLA) trace approval_request/tla/MCScenarioRoundTrip.cfg"
+	@echo "TLA+ typecheck (Apalache): $(TLA) typecheck approval_request/tla"
 	@echo "single Quint check: $(QUINT) verify approval_request/quint --only safety"
 	@echo "Quint counterexample: $(QUINT) trace approval_request/quint --only liveness-no-fairness"
 	@echo "Quint typecheck: $(QUINT) typecheck approval_request/quint/models.qnt"
