@@ -14,9 +14,13 @@
 (***************************************************************************)
 EXTENDS Approval, Integers, Sequences
 
-CONSTANT MaxLog        \* 探索する実行トレースの長さの上限（有界検証）
+CONSTANT
+    \* @type: Int;
+    MaxLog        \* 探索する実行トレースの長さの上限（有界検証）
 
-VARIABLE log           \* 起きたアクションの列（履歴変数）
+VARIABLE
+    \* @type: Seq($event);
+    log           \* 起きたアクションの列（履歴変数）
 
 SVars == <<role, req, event, log>>
 
